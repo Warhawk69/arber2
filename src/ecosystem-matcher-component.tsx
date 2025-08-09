@@ -1,423 +1,45 @@
-import React, { useState, useEffect } from 'react';
-import { Search, Check, X, CheckCircle, XCircle, Edit2 } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Search, Check, X, CheckCircle, XCircle, Edit2, RefreshCw } from 'lucide-react';
+import { useLiveOrderbooks } from './hooks/useLiveOrderbooks';
+import { useMatchesStore } from './state/matches-store';
+import { CommonMarket } from './api/types';
 
 const EcosystemMatcher = () => {
   const [activeTab, setActiveTab] = useState('manual');
-  const [selectedMarkets, setSelectedMarkets] = useState([]);
+  const [selectedMarkets, setSelectedMarkets] = useState<Array<CommonMarket & { exchange: string }>>([]);
   const [searchTermKalshi, setSearchTermKalshi] = useState('');
   const [searchTermPoly, setSearchTermPoly] = useState('');
   const [showConditionMatcher, setShowConditionMatcher] = useState(false);
-  const [selectedEcosystem, setSelectedEcosystem] = useState(null);
+  const [selectedEcosystem, setSelectedEcosystem] = useState<any>(null);
 
-  // Mock data for markets
-  const [kalshiMarkets] = useState([
-    {
-      id: 'FED-SEPT-2025',
-      title: 'Fed decision in September?',
-      category: 'Economics',
-      volume: 450000,
-      liquidity: 120000,
-      closeDate: '2025-09-18',
-      conditions: [
-        { name: '25 bps decrease', yesPrice: 0.80, noPrice: 0.20 },
-        { name: 'No change', yesPrice: 0.15, noPrice: 0.85 },
-        { name: '25+ bps increase', yesPrice: 0.01, noPrice: 0.99 }
-      ]
-    },
-    {
-      id: 'BTCPRICE-25DEC31',
-      title: 'Bitcoin above $100k by year end?',
-      category: 'Crypto',
-      volume: 890000,
-      liquidity: 250000,
-      closeDate: '2025-12-31',
-      conditions: [
-        { name: 'Yes', yesPrice: 0.40, noPrice: 0.60 },
-        { name: 'No', yesPrice: 0.60, noPrice: 0.40 }
-      ]
-    },
-    {
-      id: 'ELECTION-2028-WINNER',
-      title: 'Presidential Election Winner 2028',
-      category: 'Politics',
-      volume: 6000000,
-      liquidity: 450000,
-      closeDate: '2028-11-05',
-      conditions: [
-        { name: 'JD Vance', yesPrice: 0.28, noPrice: 0.72 },
-        { name: 'Gavin Newsom', yesPrice: 0.13, noPrice: 0.87 },
-        { name: 'Alexandria Ocasio-Cortez', yesPrice: 0.09, noPrice: 0.91 },
-        { name: 'Pete Buttigieg', yesPrice: 0.07, noPrice: 0.93 },
-        { name: 'Marco Rubio', yesPrice: 0.06, noPrice: 0.94 },
-        { name: 'Andy Beshear', yesPrice: 0.05, noPrice: 0.95 },
-        { name: 'Gretchen Whitmer', yesPrice: 0.04, noPrice: 0.96 }
-      ]
-    }
-  ]);
-
-  const [polymarketMarkets] = useState([
-    {
-      id: '0xfedrate092025',
-      title: 'Federal Reserve Rate Decision September 2025',
-      category: 'Macro',
-      volume: 420000,
-      liquidity: 110000,
-      closeDate: '2025-09-18',
-      conditions: [
-        { name: 'Rate decrease', yesPrice: 0.78, noPrice: 0.22 },
-        { name: 'No change', yesPrice: 0.16, noPrice: 0.84 },
-        { name: 'Rate increase', yesPrice: 0.02, noPrice: 0.98 }
-      ]
-    },
-    {
-      id: '0xbtc100keoy',
-      title: 'BTC above $100,000 by EOY',
-      category: 'Cryptocurrency',
-      volume: 670000,
-      liquidity: 180000,
-      closeDate: '2025-12-31',
-      conditions: [
-        { name: 'Yes', yesPrice: 0.38, noPrice: 0.62 },
-        { name: 'No', yesPrice: 0.62, noPrice: 0.38 }
-      ]
-    },
-    {
-      id: '0x2028election',
-      title: '2028 US Presidential Election',
-      category: 'Politics',
-      volume: 5200000,
-      liquidity: 380000,
-      closeDate: '2028-11-05',
-      conditions: [
-        { name: 'J.D. Vance', yesPrice: 0.27, noPrice: 0.73 },
-        { name: 'Gavin Newsom', yesPrice: 0.14, noPrice: 0.86 },
-        { name: 'AOC', yesPrice: 0.08, noPrice: 0.92 },
-        { name: 'Pete Buttigieg', yesPrice: 0.07, noPrice: 0.93 },
-        { name: 'Marco Rubio', yesPrice: 0.06, noPrice: 0.94 },
-        { name: 'Andrew Beshear', yesPrice: 0.05, noPrice: 0.95 },
-        { name: 'Gretchen Whitmer', yesPrice: 0.04, noPrice: 0.96 }
-      ]
-    }
-  ]);
-
-  const [ecosystemHistory, setEcosystemHistory] = useState([
-    {
-      id: 1,
-      name: 'Fed Rate Decision - September 2025',
-      createdDate: '2025-08-01',
-      exchanges: 4,
-      markets: 6,
-      conditions: 13,
-      status: 'active',
-      conditionsMatched: true,
-      conditionMappings: [
-        {
-          conditions: {
-            'Kalshi-Fed decision in September?': '25 bps decrease',
-            'Polymarket-Federal Reserve Rate Decision September 2025': 'Rate decrease',
-            'ProphetX-FOMC September Outcome': 'Dovish',
-            'NoVig-Fed Rates Sep': null
-          },
-          relationship: 'same'
-        },
-        {
-          conditions: {
-            'Kalshi-Fed decision in September?': 'No change',
-            'Polymarket-Federal Reserve Rate Decision September 2025': 'No change',
-            'ProphetX-FOMC September Outcome': 'Neutral',
-            'NoVig-Fed Rates Sep': null
-          },
-          relationship: 'same'
-        }
-      ],
-      marketData: [
-        {
-          exchange: 'Kalshi',
-          market: 'Fed decision in September?',
-          conditions: [
-            { name: '25 bps decrease', yesPrice: 0.80, noPrice: 0.20 },
-            { name: 'No change', yesPrice: 0.15, noPrice: 0.85 },
-            { name: '25+ bps increase', yesPrice: 0.01, noPrice: 0.99 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: 'Federal Reserve Rate Decision September 2025',
-          conditions: [
-            { name: 'Rate decrease', yesPrice: 0.78, noPrice: 0.22 },
-            { name: 'No change', yesPrice: 0.16, noPrice: 0.84 },
-            { name: 'Rate increase', yesPrice: 0.02, noPrice: 0.98 }
-          ]
-        },
-        {
-          exchange: 'ProphetX',
-          market: 'FOMC September Outcome',
-          conditions: [
-            { name: 'Hawkish', yesPrice: 0.40, noPrice: 0.60 },
-            { name: 'Dovish', yesPrice: 0.35, noPrice: 0.65 },
-            { name: 'Neutral', yesPrice: 0.25, noPrice: 0.75 }
-          ]
-        },
-        {
-          exchange: 'NoVig',
-          market: 'Fed Rates Sep',
-          conditions: [
-            { name: 'Increase', yesPrice: 0.38, noPrice: 0.62 }
-          ]
-        }
-      ]
-    },
-    {
-      id: 2,
-      name: '2028 Presidential Election',
-      createdDate: '2025-07-15',
-      exchanges: 3,
-      markets: 5,
-      conditions: 21,
-      status: 'active',
-      conditionsMatched: false,
-      conditionMappings: [],
-      marketData: []
-    }
-  ]);
-
-  const EcosystemConditionMatcher = () => {
-    const [mappings, setMappings] = useState(
-      selectedEcosystem?.conditionMappings || []
-    );
-    const [selectedConditions, setSelectedConditions] = useState({});
-    const [selectedRelationship, setSelectedRelationship] = useState('same');
-
-    const relationshipTypes = [
-      { value: 'same', label: 'Same', color: 'text-green-400' },
-      { value: 'subset', label: 'Subset', color: 'text-blue-400' },
-      { value: 'mutually-exclusive', label: 'Mutually Exclusive', color: 'text-orange-400' },
-      { value: 'complementary', label: 'Complementary', color: 'text-purple-400' },
-      { value: 'opposites', label: 'Opposites', color: 'text-red-400' },
-      { value: 'overlapping', label: 'Overlapping', color: 'text-yellow-400' }
-    ];
-
-    // Initialize selected conditions for each market
-    useEffect(() => {
-      const initialConditions = {};
-      selectedEcosystem?.marketData.forEach(market => {
-        const key = `${market.exchange}-${market.market}`;
-        initialConditions[key] = '';
-      });
-      setSelectedConditions(initialConditions);
-    }, [selectedEcosystem]);
-
-    const addMapping = () => {
-      // Check if at least one condition is selected
-      const hasSelection = Object.values(selectedConditions).some(val => val !== '');
-      if (!hasSelection) {
-        alert('Please select at least one condition');
-        return;
-      }
-
-      const newMapping = {
-        conditions: { ...selectedConditions },
-        relationship: selectedRelationship
-      };
-      
-      setMappings([...mappings, newMapping]);
-      
-      // Reset selections
-      const resetConditions = {};
-      Object.keys(selectedConditions).forEach(key => {
-        resetConditions[key] = '';
-      });
-      setSelectedConditions(resetConditions);
-    };
-
-    const removeMapping = (index) => {
-      setMappings(mappings.filter((_, i) => i !== index));
-    };
-
-    const saveConditionMappings = () => {
-      setEcosystemHistory(ecosystemHistory.map(ecosystem => 
-        ecosystem.id === selectedEcosystem.id
-          ? { ...ecosystem, conditionMappings: mappings, conditionsMatched: mappings.length > 0 }
-          : ecosystem
-      ));
-      setShowConditionMatcher(false);
-      setSelectedEcosystem(null);
-    };
-
-    const getRelationshipColor = (relationship) => {
-      const rel = relationshipTypes.find(r => r.value === relationship);
-      return rel ? rel.color : 'text-gray-400';
-    };
-
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-900 rounded-lg p-6 max-w-7xl w-full max-h-[90vh] overflow-y-auto">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-lg font-bold text-white">Match Ecosystem Conditions</h3>
-            <button onClick={() => setShowConditionMatcher(false)} className="text-gray-400 hover:text-white">
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-
-          <div className="mb-4">
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-sm text-gray-400 mb-1">Matching conditions for:</div>
-              <div className="font-medium">{selectedEcosystem?.name}</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {selectedEcosystem?.marketData.length} markets across {selectedEcosystem?.exchanges} exchanges
-              </div>
-            </div>
-          </div>
-
-          {/* Conditions Grid */}
-          <div className="mb-6 overflow-x-auto">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">Market Conditions</h4>
-              <div className="grid" style={{ gridTemplateColumns: `repeat(${selectedEcosystem?.marketData.length || 1}, minmax(200px, 1fr))`, gap: '1rem' }}>
-                {selectedEcosystem?.marketData.map((market, idx) => (
-                  <div key={idx} className="bg-gray-700 rounded p-3">
-                    <div className={`text-xs font-semibold mb-2 ${
-                      market.exchange === 'Kalshi' ? 'text-blue-400' : 
-                      market.exchange === 'Polymarket' ? 'text-purple-400' : 
-                      'text-gray-400'
-                    }`}>
-                      {market.exchange}
-                    </div>
-                    <div className="text-sm font-medium mb-2">{market.market}</div>
-                    <div className="space-y-1">
-                      {market.conditions.map((condition, condIdx) => (
-                        <div key={condIdx} className="text-xs bg-gray-800 p-2 rounded">
-                          <div>{condition.name}</div>
-                          <div className="text-gray-500 mt-1">
-                            Y: {(condition.yesPrice * 100).toFixed(0)}¢ / N: {(condition.noPrice * 100).toFixed(0)}¢
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Mapping Interface */}
-          <div className="bg-gray-800 rounded-lg p-4 mb-4">
-            <h4 className="font-semibold mb-3">Add Condition Mapping</h4>
-            
-            {/* Relationship Selection */}
-            <div className="mb-4">
-              <label className="text-xs text-gray-400 mb-1 block">Relationship Type</label>
-              <select
-                value={selectedRelationship}
-                onChange={(e) => setSelectedRelationship(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-              >
-                {relationshipTypes.map(rel => (
-                  <option key={rel.value} value={rel.value}>{rel.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Condition Dropdowns */}
-            <div className="grid" style={{ gridTemplateColumns: `repeat(${selectedEcosystem?.marketData.length || 1}, minmax(200px, 1fr))`, gap: '1rem' }}>
-              {selectedEcosystem?.marketData.map((market, idx) => {
-                const key = `${market.exchange}-${market.market}`;
-                return (
-                  <div key={idx}>
-                    <label className="text-xs text-gray-400 mb-1 block">
-                      {market.exchange} - {market.market}
-                    </label>
-                    <select
-                      value={selectedConditions[key] || ''}
-                      onChange={(e) => setSelectedConditions({
-                        ...selectedConditions,
-                        [key]: e.target.value
-                      })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    >
-                      <option value="">None</option>
-                      {market.conditions.map((condition, condIdx) => (
-                        <option key={condIdx} value={condition.name}>
-                          {condition.name} ({(condition.yesPrice * 100).toFixed(0)}¢)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-            
-            <button
-              onClick={addMapping}
-              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-            >
-              Add Mapping
-            </button>
-          </div>
-
-          {/* Current Mappings */}
-          {mappings.length > 0 && (
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">Current Mappings</h4>
-              <div className="space-y-3">
-                {mappings.map((mapping, idx) => (
-                  <div key={idx} className="bg-gray-700 p-3 rounded">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className={`text-sm font-medium ${getRelationshipColor(mapping.relationship)}`}>
-                        {relationshipTypes.find(r => r.value === mapping.relationship)?.label} Relationship
-                      </div>
-                      <button
-                        onClick={() => removeMapping(idx)}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid" style={{ gridTemplateColumns: `repeat(${Object.keys(mapping.conditions).length}, minmax(150px, 1fr))`, gap: '0.5rem' }}>
-                      {Object.entries(mapping.conditions).map(([market, condition], condIdx) => (
-                        <div key={condIdx} className="text-xs">
-                          <div className="text-gray-400">{market}</div>
-                          <div className="font-medium">{condition || '-'}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 flex justify-end space-x-2">
-            <button 
-              onClick={() => setShowConditionMatcher(false)}
-              className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
-            >
-              Cancel
-            </button>
-            <button 
-              onClick={saveConditionMappings}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm"
-            >
-              Save Mappings
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  };
+  // Use live data hooks
+  const { 
+    kalshiMarkets, 
+    polymarketMarkets, 
+    isLoading, 
+    errors, 
+    lastUpdated, 
+    refresh 
+  } = useLiveOrderbooks();
+  
+  const matchesStore = useMatchesStore();
 
   // Filter markets based on search
-  const filteredKalshiMarkets = kalshiMarkets.filter(market =>
-    market.title.toLowerCase().includes(searchTermKalshi.toLowerCase()) ||
-    market.id.toLowerCase().includes(searchTermKalshi.toLowerCase())
-  );
+  const filteredKalshiMarkets = useMemo(() => {
+    return kalshiMarkets.filter(market =>
+      market.title.toLowerCase().includes(searchTermKalshi.toLowerCase()) ||
+      market.id.toLowerCase().includes(searchTermKalshi.toLowerCase())
+    );
+  }, [kalshiMarkets, searchTermKalshi]);
 
-  const filteredPolyMarkets = polymarketMarkets.filter(market =>
-    market.title.toLowerCase().includes(searchTermPoly.toLowerCase()) ||
-    market.id.toLowerCase().includes(searchTermPoly.toLowerCase())
-  );
+  const filteredPolyMarkets = useMemo(() => {
+    return polymarketMarkets.filter(market =>
+      market.title.toLowerCase().includes(searchTermPoly.toLowerCase()) ||
+      market.id.toLowerCase().includes(searchTermPoly.toLowerCase())
+    );
+  }, [polymarketMarkets, searchTermPoly]);
 
-  const toggleMarketSelection = (market, exchange) => {
+  const toggleMarketSelection = (market: CommonMarket, exchange: string) => {
     const marketWithExchange = { ...market, exchange };
     const marketId = `${exchange}-${market.id}`;
     
@@ -431,7 +53,7 @@ const EcosystemMatcher = () => {
     });
   };
 
-  const isMarketSelected = (market, exchange) => {
+  const isMarketSelected = (market: CommonMarket, exchange: string) => {
     const marketId = `${exchange}-${market.id}`;
     return selectedMarkets.some(m => `${m.exchange}-${m.id}` === marketId);
   };
@@ -445,25 +67,17 @@ const EcosystemMatcher = () => {
     const exchanges = new Set(selectedMarkets.map(m => m.exchange)).size;
     const totalConditions = selectedMarkets.reduce((sum, m) => sum + m.conditions.length, 0);
     
-    // Create new ecosystem
-    const newEcosystem = {
-      id: Date.now(),
-      name: `New Ecosystem - ${new Date().toLocaleDateString()}`,
-      createdDate: new Date().toISOString().split('T')[0],
-      exchanges: exchanges,
-      markets: selectedMarkets.length,
-      conditions: totalConditions,
-      status: 'active',
-      conditionsMatched: false,
+    // Create new ecosystem using the store
+    matchesStore.addEcosystem({
+      name: `Ecosystem - ${new Date().toLocaleDateString()}`,
+      marketRefs: selectedMarkets.map(m => ({
+        platform: m.platform,
+        marketId: m.id,
+      })),
       conditionMappings: [],
-      marketData: selectedMarkets.map(m => ({
-        exchange: m.exchange,
-        market: m.title,
-        conditions: m.conditions
-      }))
-    };
+      conditionsMatched: false,
+    });
     
-    setEcosystemHistory([newEcosystem, ...ecosystemHistory]);
     setSelectedMarkets([]);
     alert(`Created ecosystem with ${selectedMarkets.length} markets from ${exchanges} exchange(s)`);
   };
@@ -472,13 +86,39 @@ const EcosystemMatcher = () => {
     <div className="min-h-screen bg-gray-950 text-white">
       {/* Header */}
       <div className="bg-gray-900 border-b border-gray-800">
-        <div className="px-4 py-3">
-          <h2 className="text-xl font-semibold">Ecosystem Matcher</h2>
-          <p className="text-sm text-gray-400 mt-1">Create ecosystems by matching multiple markets across exchanges</p>
+        <div className="px-4 py-3 flex items-center justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">Ecosystem Matcher</h2>
+            <p className="text-sm text-gray-400 mt-1">Create ecosystems by matching multiple markets across exchanges</p>
+            {lastUpdated && (
+              <div className="text-xs text-gray-500 mt-1">
+                Last updated: {lastUpdated.toLocaleTimeString()} • 
+                Kalshi: {kalshiMarkets.length} markets • 
+                Polymarket: {polymarketMarkets.length} markets
+              </div>
+            )}
+          </div>
+          <div className="flex items-center space-x-2">
+            <button 
+              onClick={refresh}
+              disabled={isLoading}
+              className="p-2 bg-gray-800 hover:bg-gray-700 rounded disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
       </div>
 
       <div className="p-4">
+        {/* Error Display */}
+        {errors.length > 0 && (
+          <div className="bg-red-900 bg-opacity-20 border border-red-600 rounded-lg p-3 mb-4">
+            <div className="text-sm text-red-400">
+              API Errors: {errors.slice(0, 2).map(e => e.message).join(', ')}
+            </div>
+          </div>
+        )}
         {/* Tabs */}
         <div className="flex space-x-1 mb-4">
           <button
@@ -540,34 +180,40 @@ const EcosystemMatcher = () => {
                   </div>
                 </div>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {filteredKalshiMarkets.map(market => (
-                    <div
-                      key={market.id}
-                      onClick={() => toggleMarketSelection(market, 'Kalshi')}
-                      className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
-                        isMarketSelected(market, 'Kalshi') ? 'ring-2 ring-blue-500 bg-gray-700' : ''
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">{market.title}</div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {market.category} • ${(market.volume / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                  {isLoading && filteredKalshiMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">Loading markets...</div>
+                  ) : filteredKalshiMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">No markets found</div>
+                  ) : (
+                    filteredKalshiMarkets.map(market => (
+                      <div
+                        key={market.id}
+                        onClick={() => toggleMarketSelection(market, 'Kalshi')}
+                        className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
+                          isMarketSelected(market, 'Kalshi') ? 'ring-2 ring-blue-500 bg-gray-700' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{market.title}</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {market.category} • ${((market.volume || 0) / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">Closes {market.closeTime.toLocaleDateString()}</div>
                           </div>
-                          <div className="text-xs text-gray-600 mt-1">Closes {market.closeDate}</div>
-                        </div>
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ml-2 ${
-                          isMarketSelected(market, 'Kalshi') 
-                            ? 'bg-blue-500 border-blue-500' 
-                            : 'border-gray-600'
-                        }`}>
-                          {isMarketSelected(market, 'Kalshi') && (
-                            <Check className="w-3 h-3 text-white" />
-                          )}
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ml-2 ${
+                            isMarketSelected(market, 'Kalshi') 
+                              ? 'bg-blue-500 border-blue-500' 
+                              : 'border-gray-600'
+                          }`}>
+                            {isMarketSelected(market, 'Kalshi') && (
+                              <Check className="w-3 h-3 text-white" />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -587,34 +233,40 @@ const EcosystemMatcher = () => {
                   </div>
                 </div>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {filteredPolyMarkets.map(market => (
-                    <div
-                      key={market.id}
-                      onClick={() => toggleMarketSelection(market, 'Polymarket')}
-                      className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
-                        isMarketSelected(market, 'Polymarket') ? 'ring-2 ring-purple-500 bg-gray-700' : ''
-                      }`}
-                    >
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <div className="font-medium text-sm">{market.title}</div>
-                          <div className="text-xs text-gray-500 mt-1">
-                            {market.category} • ${(market.volume / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                  {isLoading && filteredPolyMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">Loading markets...</div>
+                  ) : filteredPolyMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">No markets found</div>
+                  ) : (
+                    filteredPolyMarkets.map(market => (
+                      <div
+                        key={market.id}
+                        onClick={() => toggleMarketSelection(market, 'Polymarket')}
+                        className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
+                          isMarketSelected(market, 'Polymarket') ? 'ring-2 ring-purple-500 bg-gray-700' : ''
+                        }`}
+                      >
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1">
+                            <div className="font-medium text-sm">{market.title}</div>
+                            <div className="text-xs text-gray-500 mt-1">
+                              {market.category} • ${((market.volume || 0) / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                            </div>
+                            <div className="text-xs text-gray-600 mt-1">Closes {market.closeTime.toLocaleDateString()}</div>
                           </div>
-                          <div className="text-xs text-gray-600 mt-1">Closes {market.closeDate}</div>
-                        </div>
-                        <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ml-2 ${
-                          isMarketSelected(market, 'Polymarket') 
-                            ? 'bg-purple-500 border-purple-500' 
-                            : 'border-gray-600'
-                        }`}>
-                          {isMarketSelected(market, 'Polymarket') && (
-                            <Check className="w-3 h-3 text-white" />
-                          )}
+                          <div className={`w-5 h-5 rounded border-2 flex items-center justify-center ml-2 ${
+                            isMarketSelected(market, 'Polymarket') 
+                              ? 'bg-purple-500 border-purple-500' 
+                              : 'border-gray-600'
+                          }`}>
+                            {isMarketSelected(market, 'Polymarket') && (
+                              <Check className="w-3 h-3 text-white" />
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -669,56 +321,77 @@ const EcosystemMatcher = () => {
                 </tr>
               </thead>
               <tbody>
-                {ecosystemHistory.map((ecosystem) => (
-                  <tr key={ecosystem.id} className="border-t border-gray-800 hover:bg-gray-800">
-                    <td className="p-3">
-                      <div className="font-medium text-sm">{ecosystem.name}</div>
-                    </td>
-                    <td className="p-3 text-sm">{ecosystem.createdDate}</td>
-                    <td className="p-3 text-sm">{ecosystem.exchanges}</td>
-                    <td className="p-3 text-sm">{ecosystem.markets}</td>
-                    <td className="p-3 text-sm">{ecosystem.conditions}</td>
-                    <td className="p-3">
-                      <span className={`inline-flex px-2 py-1 rounded text-xs font-medium ${
-                        ecosystem.status === 'active' 
-                          ? 'bg-green-900 text-green-300' 
-                          : 'bg-gray-700 text-gray-300'
-                      }`}>
-                        {ecosystem.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center">
-                        {ecosystem.conditionsMatched ? (
-                          <>
-                            <CheckCircle className="w-4 h-4 text-green-400 mr-1" />
-                            <span className="text-sm text-green-400">Yes</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-4 h-4 text-yellow-400 mr-1" />
-                            <span className="text-sm text-yellow-400">No</span>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center space-x-2">
-                        <button 
-                          onClick={() => {
-                            setSelectedEcosystem(ecosystem);
-                            setShowConditionMatcher(true);
-                          }}
-                          className="text-blue-400 hover:text-blue-300"
-                          title="Edit condition mappings"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button className="text-blue-400 hover:text-blue-300 text-sm">View Details</button>
-                      </div>
+                {matchesStore.ecosystems.length === 0 ? (
+                  <tr>
+                    <td colSpan="8" className="p-8 text-center text-gray-500">
+                      No ecosystems created yet. Use the Manual Matching tab to create your first ecosystem.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  matchesStore.ecosystems.map((ecosystem) => {
+                    const exchanges = new Set(ecosystem.marketRefs.map(ref => ref.platform)).size;
+                    const markets = ecosystem.marketRefs.length;
+                    
+                    return (
+                      <tr key={ecosystem.id} className="border-t border-gray-800 hover:bg-gray-800">
+                        <td className="p-3">
+                          <div className="font-medium text-sm">{ecosystem.name}</div>
+                        </td>
+                        <td className="p-3 text-sm">{ecosystem.createdAt.toLocaleDateString()}</td>
+                        <td className="p-3 text-sm">{exchanges}</td>
+                        <td className="p-3 text-sm">{markets}</td>
+                        <td className="p-3 text-sm">
+                          {ecosystem.marketRefs.reduce((sum, ref) => {
+                            const market = [...kalshiMarkets, ...polymarketMarkets].find(m => m.id === ref.marketId);
+                            return sum + (market?.conditions.length || 0);
+                          }, 0)}
+                        </td>
+                        <td className="p-3">
+                          <span className="inline-flex px-2 py-1 rounded text-xs font-medium bg-green-900 text-green-300">
+                            active
+                          </span>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center">
+                            {ecosystem.conditionsMatched ? (
+                              <>
+                                <CheckCircle className="w-4 h-4 text-green-400 mr-1" />
+                                <span className="text-sm text-green-400">Yes</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-4 h-4 text-yellow-400 mr-1" />
+                                <span className="text-sm text-yellow-400">No</span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center space-x-2">
+                            <button 
+                              onClick={() => {
+                                // Note: This would need to be updated to work with new ecosystem structure
+                                // setSelectedEcosystem(ecosystem);
+                                // setShowConditionMatcher(true);
+                                alert('Condition mapping for new ecosystem structure coming soon');
+                              }}
+                              className="text-blue-400 hover:text-blue-300"
+                              title="Edit condition mappings"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => matchesStore.removeEcosystem(ecosystem.id)}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
