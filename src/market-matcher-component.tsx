@@ -1,283 +1,117 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Search, RefreshCw, AlertCircle, Link, Check, X, Edit2, CheckCircle, XCircle } from 'lucide-react';
+import { useLiveOrderbooks } from './hooks/useLiveOrderbooks';
+import { useMatchesStore } from './state/matches-store';
+import { marketMatcher } from './lib/matching';
+import { CommonMarket, ConditionMapping, RelationshipType } from './api/types';
 
 const MarketMatcher = () => {
   const [activeTab, setActiveTab] = useState('manual');
   const [filterVenue, setFilterVenue] = useState('all');
   const [searchTermKalshi, setSearchTermKalshi] = useState('');
   const [searchTermPoly, setSearchTermPoly] = useState('');
-  const [selectedMarkets, setSelectedMarkets] = useState({ kalshi: null, polymarket: null });
+  const [selectedMarkets, setSelectedMarkets] = useState<{ kalshi: CommonMarket | null; polymarket: CommonMarket | null }>({ kalshi: null, polymarket: null });
   const [showRulesComparison, setShowRulesComparison] = useState(false);
   const [showConditionMatcher, setShowConditionMatcher] = useState(false);
-  const [selectedMatch, setSelectedMatch] = useState(null);
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // Mock data with multiple conditions
-  const [unmatchedKalshiMarkets] = useState([
-    {
-      id: 'ELECTION-2028-WINNER',
-      title: 'Presidential Election Winner 2028',
-      category: 'Politics',
-      volume: 6000000,
-      liquidity: 450000,
-      closeDate: '2028-11-05',
-      settlementSource: 'Associated Press',
-      rules: 'Market resolves to the candidate declared winner by the Associated Press',
-      conditions: [
-        { name: 'JD Vance', yesPrice: 0.28, noPrice: 0.72, volume: 501296 },
-        { name: 'Gavin Newsom', yesPrice: 0.13, noPrice: 0.87, volume: 363835 },
-        { name: 'Alexandria Ocasio-Cortez', yesPrice: 0.09, noPrice: 0.91, volume: 218268 },
-        { name: 'Pete Buttigieg', yesPrice: 0.07, noPrice: 0.93, volume: 139748 },
-        { name: 'Marco Rubio', yesPrice: 0.06, noPrice: 0.94, volume: 128925 },
-        { name: 'Andy Beshear', yesPrice: 0.05, noPrice: 0.95, volume: 292807 },
-        { name: 'Gretchen Whitmer', yesPrice: 0.04, noPrice: 0.96, volume: 298604 }
-      ]
-    },
-    {
-      id: 'FED-SEPT-2025',
-      title: 'Fed decision in September?',
-      category: 'Economics',
-      volume: 450000,
-      liquidity: 120000,
-      closeDate: '2025-09-18',
-      settlementSource: 'Federal Reserve announcement',
-      rules: 'Resolves based on Federal Reserve rate decision at September FOMC meeting',
-      conditions: [
-        { name: '25 bps decrease', yesPrice: 0.80, noPrice: 0.20, volume: 150000 },
-        { name: 'No change', yesPrice: 0.15, noPrice: 0.85, volume: 180000 },
-        { name: '25+ bps increase', yesPrice: 0.01, noPrice: 0.99, volume: 50000 }
-      ]
-    },
-    {
-      id: 'TRUMP-MEETING-AUG',
-      title: 'Who will Trump meet with in August?',
-      category: 'Politics',
-      volume: 335000,
-      liquidity: 85000,
-      closeDate: '2025-08-31',
-      settlementSource: 'White House press pool',
-      rules: 'Resolves YES for each leader Trump meets with in August 2025',
-      conditions: [
-        { name: 'Vladimir Putin', yesPrice: 0.79, noPrice: 0.21, volume: 120000 },
-        { name: 'Volodymyr Zelenskyy', yesPrice: 0.53, noPrice: 0.47, volume: 98000 },
-        { name: 'Crown Prince Mohammed', yesPrice: 0.43, noPrice: 0.57, volume: 67000 }
-      ]
-    },
-    {
-      id: 'OPENAI-LIVESTREAM',
-      title: 'What will be said during OpenAI livestream on August 7?',
-      category: 'Technology',
-      volume: 240000,
-      liquidity: 65000,
-      closeDate: '2025-08-07',
-      settlementSource: 'OpenAI official livestream',
-      rules: 'Resolves YES for each topic mentioned during the livestream',
-      conditions: [
-        { name: 'GPT 15+', yesPrice: 0.93, noPrice: 0.07, volume: 110000 },
-        { name: 'OpenAI 5+', yesPrice: 0.75, noPrice: 0.25, volume: 85000 },
-        { name: 'Multimodal', yesPrice: 0.84, noPrice: 0.16, volume: 45000 }
-      ]
-    }
-  ]);
+  // Use live data hooks
+  const { 
+    kalshiMarkets, 
+    polymarketMarkets, 
+    isLoading, 
+    errors, 
+    lastUpdated, 
+    refresh 
+  } = useLiveOrderbooks();
+  
+  const matchesStore = useMatchesStore();
 
-  const [unmatchedPolymarketMarkets] = useState([
-    {
-      id: '0x2028election',
-      title: '2028 US Presidential Election',
-      category: 'Politics',
-      volume: 5200000,
-      liquidity: 380000,
-      closeDate: '2028-11-05',
-      settlementSource: 'AP News',
-      rules: 'Market resolves to the candidate declared winner by Associated Press',
-      conditions: [
-        { name: 'J.D. Vance', yesPrice: 0.27, noPrice: 0.73, volume: 480000 },
-        { name: 'Gavin Newsom', yesPrice: 0.14, noPrice: 0.86, volume: 340000 },
-        { name: 'AOC', yesPrice: 0.08, noPrice: 0.92, volume: 195000 },
-        { name: 'Pete Buttigieg', yesPrice: 0.07, noPrice: 0.93, volume: 125000 },
-        { name: 'Marco Rubio', yesPrice: 0.06, noPrice: 0.94, volume: 115000 },
-        { name: 'Andrew Beshear', yesPrice: 0.05, noPrice: 0.95, volume: 270000 },
-        { name: 'Gretchen Whitmer', yesPrice: 0.04, noPrice: 0.96, volume: 280000 }
-      ]
-    },
-    {
-      id: '0xfedrate092025',
-      title: 'Federal Reserve Rate Decision September 2025',
-      category: 'Macro',
-      volume: 420000,
-      liquidity: 110000,
-      closeDate: '2025-09-18',
-      settlementSource: 'Fed official statement',
-      rules: 'Resolves based on the Federal Reserve rate decision',
-      conditions: [
-        { name: 'Rate decrease', yesPrice: 0.78, noPrice: 0.22, volume: 140000 },
-        { name: 'No change', yesPrice: 0.16, noPrice: 0.84, volume: 170000 },
-        { name: 'Rate increase', yesPrice: 0.02, noPrice: 0.98, volume: 45000 }
-      ]
-    },
-    {
-      id: '0xtrumpmeetings',
-      title: 'Trump August 2025 Meetings',
-      category: 'Politics',
-      volume: 310000,
-      liquidity: 78000,
-      closeDate: '2025-08-31',
-      settlementSource: 'Official White House',
-      rules: 'Resolves YES for confirmed meetings in August',
-      conditions: [
-        { name: 'Putin', yesPrice: 0.81, noPrice: 0.19, volume: 115000 },
-        { name: 'Zelensky', yesPrice: 0.51, noPrice: 0.49, volume: 92000 },
-        { name: 'MBS', yesPrice: 0.45, noPrice: 0.55, volume: 63000 }
-      ]
-    },
-    {
-      id: '0xopenaistream',
-      title: 'OpenAI Aug 7 Announcements',
-      category: 'Tech',
-      volume: 225000,
-      liquidity: 60000,
-      closeDate: '2025-08-07',
-      settlementSource: 'OpenAI stream',
-      rules: 'YES if topic is announced during stream',
-      conditions: [
-        { name: 'GPT-15 or higher', yesPrice: 0.92, noPrice: 0.08, volume: 105000 },
-        { name: 'OpenAI Five Plus', yesPrice: 0.76, noPrice: 0.24, volume: 80000 },
-        { name: 'Multimodal AI', yesPrice: 0.85, noPrice: 0.15, volume: 40000 }
-      ]
-    }
-  ]);
+  // Filter markets based on search and category
+  const filteredKalshiMarkets = useMemo(() => {
+    return kalshiMarkets.filter(market => {
+      const matchesSearch = market.title.toLowerCase().includes(searchTermKalshi.toLowerCase()) ||
+                           market.id.toLowerCase().includes(searchTermKalshi.toLowerCase());
+      const matchesCategory = filterVenue === 'all' || 
+                             market.category.toLowerCase().includes(filterVenue.toLowerCase());
+      return matchesSearch && matchesCategory;
+    });
+  }, [kalshiMarkets, searchTermKalshi, filterVenue]);
 
-  const [matchHistory, setMatchHistory] = useState([
-    {
-      id: 1,
-      kalshi: unmatchedKalshiMarkets[0],
-      polymarket: unmatchedPolymarketMarkets[0],
-      matchDate: '2025-08-05',
-      confidence: 0.96,
-      totalVolume: 11200000,
-      conditionsMatched: true,
-      conditionMappings: [
-        { kalshi: 'JD Vance', polymarket: 'J.D. Vance', matched: true },
-        { kalshi: 'Gavin Newsom', polymarket: 'Gavin Newsom', matched: true },
-        { kalshi: 'Alexandria Ocasio-Cortez', polymarket: 'AOC', matched: true },
-        { kalshi: 'Pete Buttigieg', polymarket: 'Pete Buttigieg', matched: true },
-        { kalshi: 'Marco Rubio', polymarket: 'Marco Rubio', matched: true },
-        { kalshi: 'Andy Beshear', polymarket: 'Andrew Beshear', matched: true },
-        { kalshi: 'Gretchen Whitmer', polymarket: 'Gretchen Whitmer', matched: true }
-      ]
-    },
-    {
-      id: 2,
-      kalshi: unmatchedKalshiMarkets[1],
-      polymarket: unmatchedPolymarketMarkets[1],
-      matchDate: '2025-08-04',
-      confidence: 0.94,
-      totalVolume: 870000,
-      conditionsMatched: false,
-      conditionMappings: [
-        { kalshi: '25 bps decrease', polymarket: 'Rate decrease', matched: true },
-        { kalshi: 'No change', polymarket: 'No change', matched: true },
-        { kalshi: '25+ bps increase', polymarket: 'Rate increase', matched: true }
-      ]
-    }
-  ]);
+  const filteredPolyMarkets = useMemo(() => {
+    return polymarketMarkets.filter(market => {
+      const matchesSearch = market.title.toLowerCase().includes(searchTermPoly.toLowerCase()) ||
+                           market.id.toLowerCase().includes(searchTermPoly.toLowerCase());
+      const matchesCategory = filterVenue === 'all' || 
+                             market.category.toLowerCase().includes(filterVenue.toLowerCase());
+      return matchesSearch && matchesCategory;
+    });
+  }, [polymarketMarkets, searchTermPoly, filterVenue]);
 
-  // Auto-match suggestions
-  const [autoMatchSuggestions] = useState([
-    {
-      kalshi: { id: 'SPXCLOSE-25AUG15', title: 'Will the S&P close higher on Aug 15?' },
-      polymarket: { id: '0x1234...abcd', title: 'S&P 500 to close green on Aug 15 2025?' },
-      similarity: 0.89,
-      status: 'pending'
-    },
-    {
-      kalshi: { id: 'FEDHIKE-25SEP', title: 'Fed to raise rates in September?' },
-      polymarket: { id: '0x5678...efgh', title: 'Federal Reserve rate hike September 2025' },
-      similarity: 0.92,
-      status: 'pending'
-    }
-  ]);
-
-  // Filter markets based on search
-  const filteredKalshiMarkets = unmatchedKalshiMarkets.filter(market =>
-    market.title.toLowerCase().includes(searchTermKalshi.toLowerCase()) ||
-    market.id.toLowerCase().includes(searchTermKalshi.toLowerCase())
-  );
-
-  const filteredPolyMarkets = unmatchedPolymarketMarkets.filter(market =>
-    market.title.toLowerCase().includes(searchTermPoly.toLowerCase()) ||
-    market.id.toLowerCase().includes(searchTermPoly.toLowerCase())
-  );
-
-  // Calculate similarity score
-  const calculateSimilarity = (market1, market2) => {
-    if (!market1 || !market2) return null;
+  // Auto-match suggestions using live data
+  const autoMatchSuggestions = useMemo(() => {
+    if (kalshiMarkets.length === 0 || polymarketMarkets.length === 0) return [];
     
-    // Title similarity
-    const titleWords1 = market1.title.toLowerCase().split(' ');
-    const titleWords2 = market2.title.toLowerCase().split(' ');
-    const commonWords = titleWords1.filter(word => titleWords2.includes(word));
-    const titleSimilarity = commonWords.length / Math.max(titleWords1.length, titleWords2.length);
-    
-    // Date similarity
-    const dateSimilarity = market1.closeDate === market2.closeDate ? 1 : 0;
-    
-    // Condition count similarity
-    const conditionCountDiff = Math.abs(market1.conditions.length - market2.conditions.length);
-    const conditionSimilarity = 1 - (conditionCountDiff / Math.max(market1.conditions.length, market2.conditions.length));
-    
-    // Settlement source similarity
-    const settlementSimilarity = market1.settlementSource.toLowerCase().includes('ap') && 
-                                market2.settlementSource.toLowerCase().includes('ap') ? 1 : 
-                                market1.settlementSource.toLowerCase() === market2.settlementSource.toLowerCase() ? 1 : 0.5;
-    
-    return {
-      overall: (titleSimilarity * 0.4 + dateSimilarity * 0.3 + conditionSimilarity * 0.2 + settlementSimilarity * 0.1),
-      title: titleSimilarity,
-      date: dateSimilarity,
-      conditions: conditionSimilarity,
-      settlement: settlementSimilarity
-    };
-  };
+    return marketMatcher.suggestMatches(kalshiMarkets, polymarketMarkets, 0.8)
+      .slice(0, 10) // Limit to top 10 suggestions
+      .map(suggestion => ({
+        kalshi: { 
+          id: suggestion.kalshiMarket.id, 
+          title: suggestion.kalshiMarket.title 
+        },
+        polymarket: { 
+          id: suggestion.polymarketMarket.id, 
+          title: suggestion.polymarketMarket.title 
+        },
+        similarity: suggestion.similarity.overall,
+        status: 'pending'
+      }));
+  }, [kalshiMarkets, polymarketMarkets]);
 
-  const similarity = calculateSimilarity(selectedMarkets.kalshi, selectedMarkets.polymarket);
+  // Calculate similarity score using the matching library
+  const similarity = useMemo(() => {
+    if (!selectedMarkets.kalshi || !selectedMarkets.polymarket) return null;
+    return marketMatcher.calculateSimilarity(selectedMarkets.kalshi, selectedMarkets.polymarket);
+  }, [selectedMarkets.kalshi, selectedMarkets.polymarket]);
 
   const handleApproveMatch = () => {
-    if (!selectedMarkets.kalshi || !selectedMarkets.polymarket) return;
+    if (!selectedMarkets.kalshi || !selectedMarkets.polymarket || !similarity) return;
     
     setIsProcessing(true);
     
-    // Simulate API call
+    // Create match using the matches store
     setTimeout(() => {
-      const newMatch = {
-        id: Date.now(),
-        kalshi: selectedMarkets.kalshi,
-        polymarket: selectedMarkets.polymarket,
-        matchDate: new Date().toISOString().split('T')[0],
+      const conditionMappings = marketMatcher.findConditionMappings(
+        selectedMarkets.kalshi!, 
+        selectedMarkets.polymarket!
+      );
+
+      matchesStore.addMatch({
+        kalshiMarketId: selectedMarkets.kalshi!.id,
+        polymarketMarketId: selectedMarkets.polymarket!.id,
         confidence: similarity.overall,
-        totalVolume: selectedMarkets.kalshi.volume + selectedMarkets.polymarket.volume,
-        conditionsMatched: false,
-        conditionMappings: []
-      };
+        conditionMappings,
+        conditionsMatched: conditionMappings.length > 0,
+      });
       
-      setMatchHistory([newMatch, ...matchHistory]);
       setSelectedMarkets({ kalshi: null, polymarket: null });
       setIsProcessing(false);
       
       // Show success message
-      alert('Markets successfully matched! Please map conditions.');
+      alert('Markets successfully matched! You can now map conditions in the Match History tab.');
     }, 1000);
   };
 
   const ConditionMatcher = () => {
-    const [mappings, setMappings] = useState(
+    const [mappings, setMappings] = useState<ConditionMapping[]>(
       selectedMatch?.conditionMappings || []
     );
     const [selectedKalshi, setSelectedKalshi] = useState('');
     const [selectedPoly, setSelectedPoly] = useState('');
-    const [selectedRelationship, setSelectedRelationship] = useState('same');
+    const [selectedRelationship, setSelectedRelationship] = useState<RelationshipType>('same');
 
-    const relationshipTypes = [
+    const relationshipTypes: Array<{ value: RelationshipType; label: string; color: string }> = [
       { value: 'same', label: 'Same', color: 'text-green-400' },
       { value: 'subset', label: 'Subset', color: 'text-blue-400' },
       { value: 'mutually-exclusive', label: 'Mutually Exclusive', color: 'text-orange-400' },
@@ -288,11 +122,11 @@ const MarketMatcher = () => {
 
     const addMapping = () => {
       if (selectedKalshi && selectedPoly) {
-        const newMapping = {
-          kalshi: selectedKalshi,
-          polymarket: selectedPoly,
+        const newMapping: ConditionMapping = {
+          id: `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          kalshiCondition: selectedKalshi,
+          polymarketCondition: selectedPoly,
           relationship: selectedRelationship,
-          matched: true
         };
         setMappings([...mappings, newMapping]);
         setSelectedKalshi('');
@@ -301,30 +135,53 @@ const MarketMatcher = () => {
       }
     };
 
-    const removeMapping = (index) => {
+    const removeMapping = (index: number) => {
       setMappings(mappings.filter((_, i) => i !== index));
     };
 
     const saveConditionMappings = () => {
-      setMatchHistory(matchHistory.map(match => 
-        match.id === selectedMatch.id
-          ? { ...match, conditionMappings: mappings, conditionsMatched: mappings.length > 0 }
-          : match
-      ));
+      if (selectedMatch) {
+        matchesStore.updateMatch(selectedMatch.id, {
+          conditionMappings: mappings,
+          conditionsMatched: mappings.length > 0
+        });
+      }
       setShowConditionMatcher(false);
       setSelectedMatch(null);
     };
 
-    const getRelationshipColor = (relationship) => {
+    const getRelationshipColor = (relationship: RelationshipType) => {
       const rel = relationshipTypes.find(r => r.value === relationship);
       return rel ? rel.color : 'text-gray-400';
     };
 
+    // Get the actual market data from live data
+    const kalshiMarket = kalshiMarkets.find(m => m.id === selectedMatch?.kalshiMarketId);
+    const polyMarket = polymarketMarkets.find(m => m.id === selectedMatch?.polymarketMarketId);
+
+    if (!kalshiMarket || !polyMarket) {
+      return (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 rounded-lg p-6 max-w-md w-full">
+            <div className="text-center">
+              <p className="text-white mb-4">Market data not available</p>
+              <button 
+                onClick={() => setShowConditionMatcher(false)}
+                className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     // Get unmapped conditions
-    const mappedKalshiConditions = mappings.map(m => m.kalshi);
-    const mappedPolyConditions = mappings.map(m => m.polymarket);
-    const unmappedKalshi = selectedMatch?.kalshi.conditions.filter(c => !mappedKalshiConditions.includes(c.name)) || [];
-    const unmappedPoly = selectedMatch?.polymarket.conditions.filter(c => !mappedPolyConditions.includes(c.name)) || [];
+    const mappedKalshiConditions = mappings.map(m => m.kalshiCondition);
+    const mappedPolyConditions = mappings.map(m => m.polymarketCondition);
+    const unmappedKalshi = kalshiMarket.conditions.filter(c => !mappedKalshiConditions.includes(c.name));
+    const unmappedPoly = polyMarket.conditions.filter(c => !mappedPolyConditions.includes(c.name));
 
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
@@ -339,7 +196,7 @@ const MarketMatcher = () => {
           <div className="mb-4">
             <div className="bg-gray-800 p-3 rounded">
               <div className="text-sm text-gray-400 mb-1">Matching conditions for:</div>
-              <div className="font-medium">{selectedMatch?.kalshi.title}</div>
+              <div className="font-medium">{kalshiMarket.title} ↔ {polyMarket.title}</div>
             </div>
           </div>
 
@@ -348,7 +205,7 @@ const MarketMatcher = () => {
             <div className="bg-gray-800 rounded-lg p-4">
               <h4 className="font-semibold text-blue-400 mb-3">Kalshi Conditions</h4>
               <div className="space-y-2">
-                {selectedMatch?.kalshi.conditions.map((condition, idx) => (
+                {kalshiMarket.conditions.map((condition, idx) => (
                   <div key={idx} className={`bg-gray-700 p-3 rounded ${mappedKalshiConditions.includes(condition.name) ? 'opacity-50' : ''}`}>
                     <div className="font-medium text-sm">{condition.name}</div>
                     <div className="flex items-center justify-between mt-1">
@@ -356,7 +213,7 @@ const MarketMatcher = () => {
                         Y: {(condition.yesPrice * 100).toFixed(0)}¢ / N: {(condition.noPrice * 100).toFixed(0)}¢
                       </div>
                       <div className="text-xs text-gray-500">
-                        Vol: ${(condition.volume / 1000).toFixed(0)}k
+                        Vol: ${((condition.volume || 0) / 1000).toFixed(0)}k
                       </div>
                     </div>
                   </div>
@@ -368,7 +225,7 @@ const MarketMatcher = () => {
             <div className="bg-gray-800 rounded-lg p-4">
               <h4 className="font-semibold text-purple-400 mb-3">Polymarket Conditions</h4>
               <div className="space-y-2">
-                {selectedMatch?.polymarket.conditions.map((condition, idx) => (
+                {polyMarket.conditions.map((condition, idx) => (
                   <div key={idx} className={`bg-gray-700 p-3 rounded ${mappedPolyConditions.includes(condition.name) ? 'opacity-50' : ''}`}>
                     <div className="font-medium text-sm">{condition.name}</div>
                     <div className="flex items-center justify-between mt-1">
@@ -376,7 +233,7 @@ const MarketMatcher = () => {
                         Y: {(condition.yesPrice * 100).toFixed(0)}¢ / N: {(condition.noPrice * 100).toFixed(0)}¢
                       </div>
                       <div className="text-xs text-gray-500">
-                        Vol: ${(condition.volume / 1000).toFixed(0)}k
+                        Vol: ${((condition.volume || 0) / 1000).toFixed(0)}k
                       </div>
                     </div>
                   </div>
@@ -454,7 +311,7 @@ const MarketMatcher = () => {
                     <div className="flex items-center space-x-4 flex-1">
                       <div className="flex-1">
                         <div className="text-xs text-blue-400">Kalshi</div>
-                        <div className="text-sm font-medium">{mapping.kalshi}</div>
+                        <div className="text-sm font-medium">{mapping.kalshiCondition}</div>
                       </div>
                       <div className="px-3">
                         <div className="text-xs text-gray-400 text-center">Relationship</div>
@@ -464,7 +321,7 @@ const MarketMatcher = () => {
                       </div>
                       <div className="flex-1">
                         <div className="text-xs text-purple-400">Polymarket</div>
-                        <div className="text-sm font-medium">{mapping.polymarket}</div>
+                        <div className="text-sm font-medium">{mapping.polymarketCondition}</div>
                       </div>
                     </div>
                     <button
@@ -520,15 +377,19 @@ const MarketMatcher = () => {
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Rules</div>
-                    <p className="text-sm text-gray-300">{selectedMarkets.kalshi.rules}</p>
+                    <p className="text-sm text-gray-300">{selectedMarkets.kalshi.rules || 'No rules specified'}</p>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Settlement Source</div>
-                    <div className="text-sm text-gray-300">{selectedMarkets.kalshi.settlementSource}</div>
+                    <div className="text-sm text-gray-300">{selectedMarkets.kalshi.settlementSource || 'Not specified'}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Conditions</div>
                     <div className="text-sm text-gray-300">{selectedMarkets.kalshi.conditions.length} outcomes</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">Close Date</div>
+                    <div className="text-sm text-gray-300">{selectedMarkets.kalshi.closeTime.toLocaleDateString()}</div>
                   </div>
                 </div>
               </div>
@@ -542,15 +403,19 @@ const MarketMatcher = () => {
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Rules</div>
-                    <p className="text-sm text-gray-300">{selectedMarkets.polymarket.rules}</p>
+                    <p className="text-sm text-gray-300">{selectedMarkets.polymarket.rules || selectedMarkets.polymarket.subtitle || 'No rules specified'}</p>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Settlement Source</div>
-                    <div className="text-sm text-gray-300">{selectedMarkets.polymarket.settlementSource}</div>
+                    <div className="text-sm text-gray-300">{selectedMarkets.polymarket.settlementSource || 'Not specified'}</div>
                   </div>
                   <div>
                     <div className="text-xs text-gray-500">Conditions</div>
                     <div className="text-sm text-gray-300">{selectedMarkets.polymarket.conditions.length} outcomes</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-500">Close Date</div>
+                    <div className="text-sm text-gray-300">{selectedMarkets.polymarket.closeTime.toLocaleDateString()}</div>
                   </div>
                 </div>
               </div>
@@ -620,9 +485,24 @@ const MarketMatcher = () => {
             <h2 className="text-xl font-semibold">Market Matcher</h2>
             <p className="text-sm text-gray-400 mt-1">Match markets across Kalshi and Polymarket for arbitrage opportunities</p>
           </div>
-          <div className="flex items-center space-x-2">
-            <button className="p-2 bg-gray-800 hover:bg-gray-700 rounded">
-              <RefreshCw className="w-4 h-4" />
+          <div className="flex items-center space-x-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+              <input
+                type="text"
+                placeholder="Search ecosystems..."
+                value={searchTermKalshi}
+                onChange={(e) => setSearchTermKalshi(e.target.value)}
+                className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
+              />
+            </div>
+            
+            <button 
+              onClick={refresh}
+              disabled={isLoading}
+              className="p-2 hover:bg-gray-800 rounded disabled:opacity-50"
+            >
+              <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
             <select 
               value={filterVenue}
@@ -634,12 +514,47 @@ const MarketMatcher = () => {
               <option value="economics">Economics</option>
               <option value="technology">Technology</option>
               <option value="sports">Sports</option>
+              <option value="crypto">Crypto</option>
             </select>
           </div>
         </div>
       </div>
 
       <div className="p-4">
+        {/* Error Display */}
+        {errors.length > 0 && (
+          <div className="bg-red-900 bg-opacity-20 border border-red-600 rounded-lg p-3 mb-4">
+            <div className="flex items-start">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="text-sm">
+                <div className="font-medium text-red-500">API Errors:</div>
+                {errors.slice(0, 3).map((error, idx) => (
+                  <div key={idx} className="text-red-400 mt-1">{error.message}</div>
+                ))}
+                {errors.length > 3 && (
+                  <div className="text-red-400 mt-1">...and {errors.length - 3} more errors</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Last Updated Info */}
+        {lastUpdated && (
+          <div className="bg-gray-800 rounded-lg p-2 mb-4 text-xs text-gray-400 text-center">
+            Last updated: {lastUpdated.toLocaleTimeString()} • 
+            Kalshi: {kalshiMarkets.length} markets • 
+            Polymarket: {polymarketMarkets.length} markets
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoading && kalshiMarkets.length === 0 && polymarketMarkets.length === 0 && (
+          <div className="bg-gray-900 rounded-lg p-8 mb-4 text-center">
+            <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
+            <p className="text-gray-400">Loading live market data...</p>
+          </div>
+        )}
         {/* Tabs */}
         <div className="flex space-x-1 mb-4">
           <button
@@ -689,33 +604,46 @@ const MarketMatcher = () => {
                   </div>
                 </div>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {filteredKalshiMarkets.map(market => (
-                    <div
-                      key={market.id}
-                      onClick={() => setSelectedMarkets(prev => ({ ...prev, kalshi: market }))}
-                      className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
-                        selectedMarkets.kalshi?.id === market.id ? 'ring-2 ring-blue-500' : ''
-                      }`}
-                    >
-                      <div className="font-medium text-sm">{market.title}</div>
-                      <div className="mt-2">
-                        <div className="text-xs text-gray-500">
-                          {market.category} • ${(market.volume / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                  {isLoading && filteredKalshiMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      Loading Kalshi markets...
+                    </div>
+                  ) : filteredKalshiMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No Kalshi markets found
+                    </div>
+                  ) : (
+                    filteredKalshiMarkets.map(market => (
+                      <div
+                        key={market.id}
+                        onClick={() => setSelectedMarkets(prev => ({ ...prev, kalshi: market }))}
+                        className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
+                          selectedMarkets.kalshi?.id === market.id ? 'ring-2 ring-blue-500' : ''
+                        }`}
+                      >
+                        <div className="font-medium text-sm">{market.title}</div>
+                        <div className="mt-2">
+                          <div className="text-xs text-gray-500">
+                            {market.category} • ${((market.volume || 0) / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {market.conditions.slice(0, 3).map((condition, idx) => (
+                              <span key={idx} className="text-xs bg-gray-700 px-2 py-0.5 rounded">
+                                {condition.name}: {(condition.yesPrice * 100).toFixed(0)}¢
+                              </span>
+                            ))}
+                            {market.conditions.length > 3 && (
+                              <span className="text-xs text-gray-500">+{market.conditions.length - 3} more</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {market.conditions.slice(0, 3).map((condition, idx) => (
-                            <span key={idx} className="text-xs bg-gray-700 px-2 py-0.5 rounded">
-                              {condition.name}: {(condition.yesPrice * 100).toFixed(0)}¢
-                            </span>
-                          ))}
-                          {market.conditions.length > 3 && (
-                            <span className="text-xs text-gray-500">+{market.conditions.length - 3} more</span>
-                          )}
+                        <div className="text-xs text-gray-600 mt-1">
+                          Closes {market.closeTime.toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="text-xs text-gray-600 mt-1">Closes {market.closeDate}</div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
 
@@ -735,33 +663,46 @@ const MarketMatcher = () => {
                   </div>
                 </div>
                 <div className="space-y-2 max-h-96 overflow-y-auto">
-                  {filteredPolyMarkets.map(market => (
-                    <div
-                      key={market.id}
-                      onClick={() => setSelectedMarkets(prev => ({ ...prev, polymarket: market }))}
-                      className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
-                        selectedMarkets.polymarket?.id === market.id ? 'ring-2 ring-purple-500' : ''
-                      }`}
-                    >
-                      <div className="font-medium text-sm">{market.title}</div>
-                      <div className="mt-2">
-                        <div className="text-xs text-gray-500">
-                          {market.category} • ${(market.volume / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                  {isLoading && filteredPolyMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      Loading Polymarket markets...
+                    </div>
+                  ) : filteredPolyMarkets.length === 0 ? (
+                    <div className="text-center py-8 text-gray-500">
+                      No Polymarket markets found
+                    </div>
+                  ) : (
+                    filteredPolyMarkets.map(market => (
+                      <div
+                        key={market.id}
+                        onClick={() => setSelectedMarkets(prev => ({ ...prev, polymarket: market }))}
+                        className={`p-3 bg-gray-800 rounded cursor-pointer hover:bg-gray-700 transition-colors ${
+                          selectedMarkets.polymarket?.id === market.id ? 'ring-2 ring-purple-500' : ''
+                        }`}
+                      >
+                        <div className="font-medium text-sm">{market.title}</div>
+                        <div className="mt-2">
+                          <div className="text-xs text-gray-500">
+                            {market.category} • ${((market.volume || 0) / 1000).toFixed(0)}k vol • {market.conditions.length} conditions
+                          </div>
+                          <div className="mt-1 flex flex-wrap gap-1">
+                            {market.conditions.slice(0, 3).map((condition, idx) => (
+                              <span key={idx} className="text-xs bg-gray-700 px-2 py-0.5 rounded">
+                                {condition.name}: {(condition.yesPrice * 100).toFixed(0)}¢
+                              </span>
+                            ))}
+                            {market.conditions.length > 3 && (
+                              <span className="text-xs text-gray-500">+{market.conditions.length - 3} more</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="mt-1 flex flex-wrap gap-1">
-                          {market.conditions.slice(0, 3).map((condition, idx) => (
-                            <span key={idx} className="text-xs bg-gray-700 px-2 py-0.5 rounded">
-                              {condition.name}: {(condition.yesPrice * 100).toFixed(0)}¢
-                            </span>
-                          ))}
-                          {market.conditions.length > 3 && (
-                            <span className="text-xs text-gray-500">+{market.conditions.length - 3} more</span>
-                          )}
+                        <div className="text-xs text-gray-600 mt-1">
+                          Closes {market.closeTime.toLocaleDateString()}
                         </div>
                       </div>
-                      <div className="text-xs text-gray-600 mt-1">Closes {market.closeDate}</div>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </div>
             </div>
@@ -964,74 +905,97 @@ const MarketMatcher = () => {
                   <th className="p-3">Kalshi Market</th>
                   <th className="p-3">Polymarket Market</th>
                   <th className="p-3">Match Date</th>
+                  <th className="p-3">Confidence</th>
                   <th className="p-3">Conditions</th>
-                  <th className="p-3">Total Volume</th>
                   <th className="p-3">Conditions Matched</th>
                   <th className="p-3">Actions</th>
                 </tr>
               </thead>
               <tbody>
-                {matchHistory.map(match => (
-                  <tr key={match.id} className="border-t border-gray-800 hover:bg-gray-800">
-                    <td className="p-3">
-                      <div className="text-sm font-medium">{match.kalshi.title}</div>
-                      <div className="text-xs text-gray-500">{match.kalshi.id}</div>
-                      <div className="text-xs text-gray-600 mt-1">{match.kalshi.conditions.length} conditions</div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-sm font-medium">{match.polymarket.title}</div>
-                      <div className="text-xs text-gray-500">{match.polymarket.id}</div>
-                      <div className="text-xs text-gray-600 mt-1">{match.polymarket.conditions.length} conditions</div>
-                    </td>
-                    <td className="p-3 text-sm">
-                      {match.matchDate}
-                    </td>
-                    <td className="p-3">
-                      <select
-                        className="bg-gray-700 border border-gray-600 rounded px-2 py-1 text-sm"
-                        defaultValue={match.kalshi.conditions.length > 1 ? 'multi' : 'single'}
-                      >
-                        <option value="single">Single</option>
-                        <option value="multi">Multi</option>
-                      </select>
-                    </td>
-                    <td className="p-3 text-sm">
-                      ${(match.totalVolume / 1000).toFixed(0)}k
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center">
-                        {match.conditionsMatched ? (
-                          <>
-                            <CheckCircle className="w-4 h-4 text-green-400 mr-1" />
-                            <span className="text-sm text-green-400">Yes</span>
-                          </>
-                        ) : (
-                          <>
-                            <XCircle className="w-4 h-4 text-yellow-400 mr-1" />
-                            <span className="text-sm text-yellow-400">No</span>
-                          </>
-                        )}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex items-center space-x-2">
-                        <button 
-                          onClick={() => {
-                            setSelectedMatch(match);
-                            setShowConditionMatcher(true);
-                          }}
-                          className="text-blue-400 hover:text-blue-300"
-                          title="Edit condition mappings"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button className="text-red-400 hover:text-red-300 text-sm">
-                          Unmatch
-                        </button>
-                      </div>
+                {matchesStore.matches.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="p-8 text-center text-gray-500">
+                      No matches created yet. Use the Manual Matching tab to create your first match.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  matchesStore.matches.map(match => {
+                    const kalshiMarket = kalshiMarkets.find(m => m.id === match.kalshiMarketId);
+                    const polyMarket = polymarketMarkets.find(m => m.id === match.polymarketMarketId);
+                    
+                    return (
+                      <tr key={match.id} className="border-t border-gray-800 hover:bg-gray-800">
+                        <td className="p-3">
+                          <div className="text-sm font-medium">
+                            {kalshiMarket?.title || match.kalshiMarketId}
+                          </div>
+                          <div className="text-xs text-gray-500">{match.kalshiMarketId}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            {kalshiMarket ? kalshiMarket.conditions.length : 0} conditions
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="text-sm font-medium">
+                            {polyMarket?.title || match.polymarketMarketId}
+                          </div>
+                          <div className="text-xs text-gray-500">{match.polymarketMarketId}</div>
+                          <div className="text-xs text-gray-600 mt-1">
+                            {polyMarket ? polyMarket.conditions.length : 0} conditions
+                          </div>
+                        </td>
+                        <td className="p-3 text-sm">
+                          {match.createdAt.toLocaleDateString()}
+                        </td>
+                        <td className="p-3 text-sm">
+                          <span className={`font-medium ${
+                            match.confidence > 0.9 ? 'text-green-400' : 
+                            match.confidence > 0.7 ? 'text-yellow-400' : 'text-red-400'
+                          }`}>
+                            {(match.confidence * 100).toFixed(1)}%
+                          </span>
+                        </td>
+                        <td className="p-3 text-sm">
+                          {match.conditionMappings.length} mappings
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center">
+                            {match.conditionsMatched ? (
+                              <>
+                                <CheckCircle className="w-4 h-4 text-green-400 mr-1" />
+                                <span className="text-sm text-green-400">Yes</span>
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="w-4 h-4 text-yellow-400 mr-1" />
+                                <span className="text-sm text-yellow-400">No</span>
+                              </>
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="flex items-center space-x-2">
+                            <button 
+                              onClick={() => {
+                                setSelectedMatch(match);
+                                setShowConditionMatcher(true);
+                              }}
+                              className="text-blue-400 hover:text-blue-300"
+                              title="Edit condition mappings"
+                            >
+                              <Edit2 className="w-4 h-4" />
+                            </button>
+                            <button 
+                              onClick={() => matchesStore.removeMatch(match.id)}
+                              className="text-red-400 hover:text-red-300 text-sm"
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
               </tbody>
             </table>
           </div>
