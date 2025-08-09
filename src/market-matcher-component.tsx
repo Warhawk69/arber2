@@ -90,10 +90,10 @@ const MarketMatcher = () => {
 
     const addMapping = () => {
       if (selectedKalshi && selectedPoly) {
-        const newMapping = {
+        const newMapping: ConditionMapping = {
           kalshi: selectedKalshi,
           polymarket: selectedPoly,
-          relationship: selectedRelationship,
+          relationship: selectedRelationship as ConditionMapping['relationship'],
           matched: true
         };
         setMappings([...mappings, newMapping]);
@@ -103,7 +103,7 @@ const MarketMatcher = () => {
       }
     };
 
-    const removeMapping = (index) => {
+    const removeMapping = (index: number) => {
       setMappings(mappings.filter((_, i) => i !== index));
     };
 
@@ -124,7 +124,7 @@ const MarketMatcher = () => {
       }
     };
 
-    const getRelationshipColor = (relationship) => {
+    const getRelationshipColor = (relationship: string) => {
       const rel = relationshipTypes.find(r => r.value === relationship);
       return rel ? rel.color : 'text-gray-400';
     };

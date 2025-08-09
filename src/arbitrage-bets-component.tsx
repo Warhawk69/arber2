@@ -77,7 +77,7 @@ const ArbitrageBets = () => {
     item.market.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const toggleRowExpansion = (id) => {
+  const toggleRowExpansion = (id: number) => {
     setExpandedRows(prev => 
       prev.includes(id) 
         ? prev.filter(rowId => rowId !== id)
@@ -85,9 +85,9 @@ const ArbitrageBets = () => {
     );
   };
 
-  const ExpandedConditions = ({ item }) => (
+  const ExpandedConditions = ({ item }: { item: any }) => (
     <tr>
-      <td colSpan="10" className="p-0">
+      <td colSpan={10} className="p-0">
         <div className="bg-gray-800 border-t border-gray-700">
           <div className="p-4">
             <div className="grid grid-cols-2 gap-6">
@@ -103,7 +103,7 @@ const ArbitrageBets = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {item.kalshiConditions.map((condition, idx) => (
+                    {item.kalshiConditions.map((condition: any, idx: number) => (
                       <tr key={idx} className="text-sm">
                         <td className="py-2">{condition.name}</td>
                         <td className="py-2 text-right text-green-400">{(condition.yesPrice * 100).toFixed(0)}¢</td>
@@ -126,7 +126,7 @@ const ArbitrageBets = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {item.polymarketConditions.map((condition, idx) => (
+                    {item.polymarketConditions.map((condition: any, idx: number) => (
                       <tr key={idx} className="text-sm">
                         <td className="py-2">{condition.name}</td>
                         <td className="py-2 text-right text-green-400">{(condition.yesPrice * 100).toFixed(0)}¢</td>
