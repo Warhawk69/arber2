@@ -1,481 +1,72 @@
 import React, { useState, useEffect } from 'react';
 import { Search, RefreshCw, ChevronDown, Edit2, CheckCircle, XCircle, X } from 'lucide-react';
+import { useMatchStore } from './utils/matchStore';
+import type { MatchedMarketPair } from './types';
 
 const MatchedEcosystems = () => {
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [expandedRows, setExpandedRows] = useState([]);
+  const [selectedItems, setSelectedItems] = useState<number[]>([]);
+  const [expandedRows, setExpandedRows] = useState<number[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [showConditionMatcher, setShowConditionMatcher] = useState(false);
-  const [selectedEcosystem, setSelectedEcosystem] = useState(null);
+  const [selectedEcosystem, setSelectedEcosystem] = useState<MatchedMarketPair | null>(null);
 
-  // Mock data for ecosystem matching
-  const [ecosystemData, setEcosystemData] = useState([
-    {
-      id: 1,
-      name: 'Fed Rate Decision - September 2025',
-      endTime: 'Sep 18, 2025',
-      daysUntilClose: 42,
-      exchanges: 4,
-      markets: 6,
-      conditions: 13,
-      updated: '2 min ago',
-      conditionsMatched: true,
-      conditionMappings: [
+  // Use the match store to get live data
+  const { matches, updateMatch } = useMatchStore();
+
+  // Transform matches into ecosystem format for display
+  const ecosystemData = matches.map(match => {
+    const daysUntilClose = Math.ceil(
+      (new Date(match.earliestEndTime).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)
+    );
+    
+    return {
+      id: match.id,
+      name: `${match.kalshi.title} / ${match.polymarket.title}`,
+      endTime: new Date(match.earliestEndTime).toLocaleDateString(),
+      daysUntilClose: Math.max(0, daysUntilClose),
+      exchanges: 2, // Always Kalshi + Polymarket
+      markets: 2, // Always a pair
+      conditions: match.kalshi.conditions.length + match.polymarket.conditions.length,
+      updated: new Date(match.createdAt).toLocaleDateString(),
+      conditionsMatched: match.conditionsMatched,
+      conditionMappings: match.conditionMappings,
+      marketData: [
         {
-          conditions: {
-            'Kalshi-Fed September Decision': '25 bps increase',
-            'Polymarket-Federal Reserve Rate Decision': 'Rate increase',
-            'Kalshi-Fed Hike by 50bps+': null,
-            'ProphetX-FOMC September Outcome': null,
-            'NoVig-Fed Rates Sep': 'Increase',
-            'Polymarket-Fed Terminal Rate >5.5%': null
-          },
-          relationship: 'same'
+          exchange: 'Kalshi',
+          market: match.kalshi.title,
+          conditions: match.kalshi.conditions
         },
         {
-          conditions: {
-            'Kalshi-Fed September Decision': 'No change',
-            'Polymarket-Federal Reserve Rate Decision': 'No change',
-            'Kalshi-Fed Hike by 50bps+': null,
-            'ProphetX-FOMC September Outcome': 'Neutral',
-            'NoVig-Fed Rates Sep': null,
-            'Polymarket-Fed Terminal Rate >5.5%': null
-          },
-          relationship: 'same'
+          exchange: 'Polymarket', 
+          market: match.polymarket.title,
+          conditions: match.polymarket.conditions
         }
       ],
-      marketData: [
-        {
-          exchange: 'Kalshi',
-          market: 'Fed September Decision',
-          conditions: [
-            { name: '25 bps increase', yesPrice: 0.35, noPrice: 0.65 },
-            { name: 'No change', yesPrice: 0.45, noPrice: 0.55 },
-            { name: '25 bps decrease', yesPrice: 0.18, noPrice: 0.82 },
-            { name: '50+ bps increase', yesPrice: 0.02, noPrice: 0.98 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: 'Federal Reserve Rate Decision',
-          conditions: [
-            { name: 'Rate increase', yesPrice: 0.37, noPrice: 0.63 },
-            { name: 'No change', yesPrice: 0.44, noPrice: 0.56 },
-            { name: 'Rate decrease', yesPrice: 0.19, noPrice: 0.81 }
-          ]
-        },
-        {
-          exchange: 'Kalshi',
-          market: 'Fed Hike by 50bps+',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.02, noPrice: 0.98 },
-            { name: 'No', yesPrice: 0.98, noPrice: 0.02 }
-          ]
-        },
-        {
-          exchange: 'ProphetX',
-          market: 'FOMC September Outcome',
-          conditions: [
-            { name: 'Hawkish', yesPrice: 0.40, noPrice: 0.60 },
-            { name: 'Dovish', yesPrice: 0.35, noPrice: 0.65 },
-            { name: 'Neutral', yesPrice: 0.25, noPrice: 0.75 }
-          ]
-        },
-        {
-          exchange: 'NoVig',
-          market: 'Fed Rates Sep',
-          conditions: [
-            { name: 'Increase', yesPrice: 0.38, noPrice: 0.62 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: 'Fed Terminal Rate >5.5%',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.15, noPrice: 0.85 },
-            { name: 'No', yesPrice: 0.85, noPrice: 0.15 }
-          ]
-        }
-      ]
-    },
-    {
-      id: 2,
-      name: '2028 Presidential Election',
-      endTime: 'Nov 5, 2028',
-      daysUntilClose: 1185,
-      exchanges: 3,
-      markets: 5,
-      conditions: 21,
-      updated: '5 min ago',
-      conditionsMatched: false,
-      conditionMappings: [],
-      marketData: [
-        {
-          exchange: 'Kalshi',
-          market: 'Presidential Election Winner 2028',
-          conditions: [
-            { name: 'JD Vance', yesPrice: 0.28, noPrice: 0.72 },
-            { name: 'Gavin Newsom', yesPrice: 0.13, noPrice: 0.87 },
-            { name: 'Alexandria Ocasio-Cortez', yesPrice: 0.09, noPrice: 0.91 },
-            { name: 'Pete Buttigieg', yesPrice: 0.07, noPrice: 0.93 },
-            { name: 'Marco Rubio', yesPrice: 0.06, noPrice: 0.94 },
-            { name: 'Andy Beshear', yesPrice: 0.05, noPrice: 0.95 },
-            { name: 'Gretchen Whitmer', yesPrice: 0.04, noPrice: 0.96 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: '2028 US Presidential Election',
-          conditions: [
-            { name: 'J.D. Vance', yesPrice: 0.27, noPrice: 0.73 },
-            { name: 'Gavin Newsom', yesPrice: 0.14, noPrice: 0.86 },
-            { name: 'AOC', yesPrice: 0.08, noPrice: 0.92 },
-            { name: 'Pete Buttigieg', yesPrice: 0.07, noPrice: 0.93 },
-            { name: 'Marco Rubio', yesPrice: 0.06, noPrice: 0.94 },
-            { name: 'Andrew Beshear', yesPrice: 0.05, noPrice: 0.95 },
-            { name: 'Gretchen Whitmer', yesPrice: 0.04, noPrice: 0.96 }
-          ]
-        },
-        {
-          exchange: 'Kalshi',
-          market: 'Republican Nominee 2028',
-          conditions: [
-            { name: 'JD Vance', yesPrice: 0.52, noPrice: 0.48 },
-            { name: 'Marco Rubio', yesPrice: 0.15, noPrice: 0.85 },
-            { name: 'Other', yesPrice: 0.33, noPrice: 0.67 }
-          ]
-        },
-        {
-          exchange: 'Kalshi',
-          market: 'Democratic Nominee 2028',
-          conditions: [
-            { name: 'Gavin Newsom', yesPrice: 0.35, noPrice: 0.65 },
-            { name: 'Gretchen Whitmer', yesPrice: 0.18, noPrice: 0.82 },
-            { name: 'Other', yesPrice: 0.47, noPrice: 0.53 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: 'Party to Win 2028',
-          conditions: [
-            { name: 'Republican', yesPrice: 0.48, noPrice: 0.52 },
-            { name: 'Democrat', yesPrice: 0.52, noPrice: 0.48 }
-          ]
-        }
-      ]
-    },
-    {
-      id: 3,
-      name: 'Bitcoin Price EOY 2025',
-      endTime: 'Dec 31, 2025',
-      daysUntilClose: 145,
-      exchanges: 5,
-      markets: 8,
-      conditions: 15,
-      updated: '8 min ago',
-      conditionsMatched: true,
-      conditionMappings: [
-        {
-          conditions: {
-            'Kalshi-Bitcoin > $100k': 'Yes',
-            'Polymarket-BTC above $100,000 by EOY': 'Yes',
-            'Kalshi-Bitcoin > $150k': null,
-            'Polymarket-BTC Price Range EOY': '$100k-$150k',
-            'ProphetX-Bitcoin EOY Price': 'Above $100k',
-            'NoVig-BTC 100k EOY': 'Yes',
-            'Sporttrade-Bitcoin Year End': 'Over $100,000',
-            'Kalshi-Bitcoin ATH in 2025': null
-          },
-          relationship: 'same'
-        }
-      ],
-      marketData: [
-        {
-          exchange: 'Kalshi',
-          market: 'Bitcoin > $100k',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.40, noPrice: 0.60 },
-            { name: 'No', yesPrice: 0.60, noPrice: 0.40 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: 'BTC above $100,000 by EOY',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.38, noPrice: 0.62 },
-            { name: 'No', yesPrice: 0.62, noPrice: 0.38 }
-          ]
-        },
-        {
-          exchange: 'Kalshi',
-          market: 'Bitcoin > $150k',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.15, noPrice: 0.85 },
-            { name: 'No', yesPrice: 0.85, noPrice: 0.15 }
-          ]
-        },
-        {
-          exchange: 'Polymarket',
-          market: 'BTC Price Range EOY',
-          conditions: [
-            { name: '<$50k', yesPrice: 0.05, noPrice: 0.95 },
-            { name: '$50k-$100k', yesPrice: 0.57, noPrice: 0.43 },
-            { name: '$100k-$150k', yesPrice: 0.25, noPrice: 0.75 },
-            { name: '>$150k', yesPrice: 0.13, noPrice: 0.87 }
-          ]
-        },
-        {
-          exchange: 'ProphetX',
-          market: 'Bitcoin EOY Price',
-          conditions: [
-            { name: 'Above $100k', yesPrice: 0.39, noPrice: 0.61 }
-          ]
-        },
-        {
-          exchange: 'NoVig',
-          market: 'BTC 100k EOY',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.41, noPrice: 0.59 },
-            { name: 'No', yesPrice: 0.59, noPrice: 0.41 }
-          ]
-        },
-        {
-          exchange: 'Sporttrade',
-          market: 'Bitcoin Year End',
-          conditions: [
-            { name: 'Over $100,000', yesPrice: 0.37, noPrice: 0.63 }
-          ]
-        },
-        {
-          exchange: 'Kalshi',
-          market: 'Bitcoin ATH in 2025',
-          conditions: [
-            { name: 'Yes', yesPrice: 0.78, noPrice: 0.22 },
-            { name: 'No', yesPrice: 0.22, noPrice: 0.78 }
-          ]
-        }
-      ]
-    }
-  ]);
+      // Store original match for reference
+      originalMatch: match
+    };
+  });
 
   const EcosystemConditionMatcher = () => {
-    const [mappings, setMappings] = useState(
-      selectedEcosystem?.conditionMappings || []
-    );
-    const [selectedConditions, setSelectedConditions] = useState({});
-    const [selectedRelationship, setSelectedRelationship] = useState('same');
-
-    const relationshipTypes = [
-      { value: 'same', label: 'Same', color: 'text-green-400' },
-      { value: 'subset', label: 'Subset', color: 'text-blue-400' },
-      { value: 'mutually-exclusive', label: 'Mutually Exclusive', color: 'text-orange-400' },
-      { value: 'complementary', label: 'Complementary', color: 'text-purple-400' },
-      { value: 'opposites', label: 'Opposites', color: 'text-red-400' },
-      { value: 'overlapping', label: 'Overlapping', color: 'text-yellow-400' }
-    ];
-
-    // Initialize selected conditions for each market
-    useEffect(() => {
-      const initialConditions = {};
-      selectedEcosystem?.marketData.forEach(market => {
-        const key = `${market.exchange}-${market.market}`;
-        initialConditions[key] = '';
-      });
-      setSelectedConditions(initialConditions);
-    }, []);
-
-    const addMapping = () => {
-      // Check if at least one condition is selected
-      const hasSelection = Object.values(selectedConditions).some(val => val !== '');
-      if (!hasSelection) {
-        alert('Please select at least one condition');
-        return;
-      }
-
-      const newMapping = {
-        conditions: { ...selectedConditions },
-        relationship: selectedRelationship
-      };
-      
-      setMappings([...mappings, newMapping]);
-      
-      // Reset selections
-      const resetConditions = {};
-      Object.keys(selectedConditions).forEach(key => {
-        resetConditions[key] = '';
-      });
-      setSelectedConditions(resetConditions);
-    };
-
-    const removeMapping = (index) => {
-      setMappings(mappings.filter((_, i) => i !== index));
-    };
-
-    const saveConditionMappings = () => {
-      setEcosystemData(ecosystemData.map(ecosystem => 
-        ecosystem.id === selectedEcosystem.id
-          ? { ...ecosystem, conditionMappings: mappings, conditionsMatched: mappings.length > 0 }
-          : ecosystem
-      ));
-      setShowConditionMatcher(false);
-      setSelectedEcosystem(null);
-    };
-
-    const getRelationshipColor = (relationship) => {
-      const rel = relationshipTypes.find(r => r.value === relationship);
-      return rel ? rel.color : 'text-gray-400';
-    };
-
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-        <div className="bg-gray-900 rounded-lg p-6 max-w-7xl w-full max-h-[90vh] overflow-y-auto">
+        <div className="bg-gray-900 rounded-lg p-6 max-w-4xl w-full">
           <div className="flex justify-between items-center mb-4">
             <h3 className="text-lg font-bold text-white">Match Ecosystem Conditions</h3>
             <button onClick={() => setShowConditionMatcher(false)} className="text-gray-400 hover:text-white">
               <X className="w-5 h-5" />
             </button>
           </div>
-
-          <div className="mb-4">
-            <div className="bg-gray-800 p-3 rounded">
-              <div className="text-sm text-gray-400 mb-1">Matching conditions for:</div>
-              <div className="font-medium">{selectedEcosystem?.name}</div>
-              <div className="text-xs text-gray-500 mt-1">
-                {selectedEcosystem?.marketData.length} markets across {selectedEcosystem?.exchanges} exchanges
-              </div>
-            </div>
+          <div className="text-center py-8 text-gray-400">
+            <p>Condition matching functionality will be available in a future version.</p>
+            <p className="text-sm mt-2">Use the Market Matcher to create condition mappings.</p>
           </div>
-
-          {/* Conditions Grid */}
-          <div className="mb-6 overflow-x-auto">
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">Market Conditions</h4>
-              <div className="grid" style={{ gridTemplateColumns: `repeat(${selectedEcosystem?.marketData.length || 1}, minmax(200px, 1fr))`, gap: '1rem' }}>
-                {selectedEcosystem?.marketData.map((market, idx) => (
-                  <div key={idx} className="bg-gray-700 rounded p-3">
-                    <div className={`text-xs font-semibold mb-2 ${
-                      market.exchange === 'Kalshi' ? 'text-blue-400' : 
-                      market.exchange === 'Polymarket' ? 'text-purple-400' : 
-                      'text-gray-400'
-                    }`}>
-                      {market.exchange}
-                    </div>
-                    <div className="text-sm font-medium mb-2">{market.market}</div>
-                    <div className="space-y-1">
-                      {market.conditions.map((condition, condIdx) => (
-                        <div key={condIdx} className="text-xs bg-gray-800 p-2 rounded">
-                          <div>{condition.name}</div>
-                          <div className="text-gray-500 mt-1">
-                            Y: {(condition.yesPrice * 100).toFixed(0)}¢ / N: {(condition.noPrice * 100).toFixed(0)}¢
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Mapping Interface */}
-          <div className="bg-gray-800 rounded-lg p-4 mb-4">
-            <h4 className="font-semibold mb-3">Add Condition Mapping</h4>
-            
-            {/* Relationship Selection */}
-            <div className="mb-4">
-              <label className="text-xs text-gray-400 mb-1 block">Relationship Type</label>
-              <select
-                value={selectedRelationship}
-                onChange={(e) => setSelectedRelationship(e.target.value)}
-                className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-              >
-                {relationshipTypes.map(rel => (
-                  <option key={rel.value} value={rel.value}>{rel.label}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Condition Dropdowns */}
-            <div className="grid" style={{ gridTemplateColumns: `repeat(${selectedEcosystem?.marketData.length || 1}, minmax(200px, 1fr))`, gap: '1rem' }}>
-              {selectedEcosystem?.marketData.map((market, idx) => {
-                const key = `${market.exchange}-${market.market}`;
-                return (
-                  <div key={idx}>
-                    <label className="text-xs text-gray-400 mb-1 block">
-                      {market.exchange} - {market.market}
-                    </label>
-                    <select
-                      value={selectedConditions[key] || ''}
-                      onChange={(e) => setSelectedConditions({
-                        ...selectedConditions,
-                        [key]: e.target.value
-                      })}
-                      className="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm"
-                    >
-                      <option value="">None</option>
-                      {market.conditions.map((condition, condIdx) => (
-                        <option key={condIdx} value={condition.name}>
-                          {condition.name} ({(condition.yesPrice * 100).toFixed(0)}¢)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              })}
-            </div>
-            
-            <button
-              onClick={addMapping}
-              className="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded text-sm"
-            >
-              Add Mapping
-            </button>
-          </div>
-
-          {/* Current Mappings */}
-          {mappings.length > 0 && (
-            <div className="bg-gray-800 rounded-lg p-4">
-              <h4 className="font-semibold mb-3">Current Mappings</h4>
-              <div className="space-y-3">
-                {mappings.map((mapping, idx) => (
-                  <div key={idx} className="bg-gray-700 p-3 rounded">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className={`text-sm font-medium ${getRelationshipColor(mapping.relationship)}`}>
-                        {relationshipTypes.find(r => r.value === mapping.relationship)?.label} Relationship
-                      </div>
-                      <button
-                        onClick={() => removeMapping(idx)}
-                        className="text-red-400 hover:text-red-300"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                    <div className="grid" style={{ gridTemplateColumns: `repeat(${Object.keys(mapping.conditions).length}, minmax(150px, 1fr))`, gap: '0.5rem' }}>
-                      {Object.entries(mapping.conditions).map(([market, condition], condIdx) => (
-                        <div key={condIdx} className="text-xs">
-                          <div className="text-gray-400">{market}</div>
-                          <div className="font-medium">{condition || '-'}</div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 flex justify-end space-x-2">
+          <div className="mt-6 flex justify-end">
             <button 
               onClick={() => setShowConditionMatcher(false)}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded text-sm"
             >
-              Cancel
-            </button>
-            <button 
-              onClick={saveConditionMappings}
-              className="px-4 py-2 bg-green-600 hover:bg-green-700 rounded text-sm"
-            >
-              Save Mappings
+              Close
             </button>
           </div>
         </div>
@@ -505,10 +96,12 @@ const MatchedEcosystems = () => {
 
   const handleApproveEcosystem = () => {
     if (selectedItems.length === 0) {
-      alert('Please select at least one market to create an ecosystem');
+      alert('Please select at least one market pair');
       return;
     }
-    alert(`Creating ecosystem with ${selectedItems.length} markets`);
+    
+    // In a real app, this would trigger some action
+    alert(`Selected ${selectedItems.length} market pair(s) for ecosystem operations`);
     setSelectedItems([]);
   };
 
@@ -618,6 +211,16 @@ const MatchedEcosystems = () => {
       </div>
 
       <div className="p-4">
+        {/* No matches message */}
+        {ecosystemData.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-gray-400">No matched market pairs found.</p>
+            <p className="text-sm text-gray-500 mt-2">
+              Use the Market Matcher to create market pairs first.
+            </p>
+          </div>
+        )}
+
         {/* Selection Actions */}
         {selectedItems.length > 0 && (
           <div className="bg-blue-900 bg-opacity-20 border border-blue-600 rounded-lg p-3 mb-4 flex items-center justify-between">

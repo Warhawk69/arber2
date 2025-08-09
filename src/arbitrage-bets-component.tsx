@@ -1,144 +1,83 @@
 import React, { useState, useEffect } from 'react';
 import { Circle, Square, Search, Settings, RefreshCw, ChevronDown } from 'lucide-react';
+import { useMatchStore } from './utils/matchStore';
+import { calculateMultipleArbitrageOpportunities, formatArbitrageForDisplay } from './utils/arbitrage';
+import type { ArbitrageOpportunity } from './types';
 
 const ArbitrageBets = () => {
   const [activeTab, setActiveTab] = useState('pre-match');
   const [searchTerm, setSearchTerm] = useState('');
-  const [arbitrageData, setArbitrageData] = useState([]);
-  const [expandedRows, setExpandedRows] = useState([]);
+  const [arbitrageData, setArbitrageData] = useState<any[]>([]);
+  const [expandedRows, setExpandedRows] = useState<number[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock data for demonstration with conditions
-  const mockArbitrageData = [
-    {
-      id: 1,
-      percentage: 1.64,
-      event: 'Toronto Blue Jays vs Cleveland Guardians',
-      eventType: 'Baseball | MLB',
-      market: '1st inning Total Runs',
-      startTime: '7:10 PM',
-      bets: [
-        { outcome: 'Over 0.5', venue: 'NoVig', odds: '+125', stake: 100, payout: 225 },
-        { outcome: 'Under 0.5', venue: 'Sporttrade', odds: '-117', stake: 117, payout: 217 }
-      ],
-      profit: 8,
-      totalStake: 217,
-      updated: '2 min ago',
-      kalshiConditions: [
-        { name: 'Over 0.5', yesPrice: 0.44, noPrice: 0.56 },
-        { name: 'Under 0.5', yesPrice: 0.54, noPrice: 0.46 }
-      ],
-      polymarketConditions: [
-        { name: 'Over 0.5 runs', yesPrice: 0.42, noPrice: 0.58 },
-        { name: 'Under 0.5 runs', yesPrice: 0.56, noPrice: 0.44 }
-      ]
-    },
-    {
-      id: 2,
-      percentage: 1.6,
-      event: 'Atlanta Braves vs Pittsburgh Pirates',
-      eventType: 'Baseball | MLB',
-      market: 'Total Runs',
-      startTime: '8:39 PM',
-      bets: [
-        { outcome: 'Over 8.5', venue: 'ProphetX', odds: '-108', stake: 108, payout: 208 },
-        { outcome: 'Under 8.5', venue: 'NoVig', odds: '+113', stake: 100, payout: 213 }
-      ],
-      profit: 5,
-      totalStake: 208,
-      updated: '5 min ago',
-      kalshiConditions: [
-        { name: 'Over 8.5', yesPrice: 0.52, noPrice: 0.48 },
-        { name: 'Under 8.5', yesPrice: 0.47, noPrice: 0.53 }
-      ],
-      polymarketConditions: [
-        { name: 'Over 8.5 total', yesPrice: 0.50, noPrice: 0.50 },
-        { name: 'Under 8.5 total', yesPrice: 0.49, noPrice: 0.51 }
-      ]
-    },
-    {
-      id: 3,
-      percentage: 1.35,
-      event: 'Atlanta Braves vs Pittsburgh Pirates',
-      eventType: 'Baseball | MLB',
-      market: '1st Half Total Runs',
-      startTime: '8:30 PM',
-      bets: [
-        { outcome: 'Over 7.5', venue: 'Kalshi', odds: '-235', stake: 235, payout: 335 },
-        { outcome: 'Under 7.5', venue: 'Polymarket', odds: '+240', stake: 100, payout: 340 }
-      ],
-      profit: 5,
-      totalStake: 335,
-      updated: '8 min ago',
-      kalshiConditions: [
-        { name: 'Over 7.5', yesPrice: 0.70, noPrice: 0.30 },
-        { name: 'Under 7.5', yesPrice: 0.29, noPrice: 0.71 }
-      ],
-      polymarketConditions: [
-        { name: 'Over 7.5 runs', yesPrice: 0.68, noPrice: 0.32 },
-        { name: 'Under 7.5 runs', yesPrice: 0.31, noPrice: 0.69 }
-      ]
-    },
-    {
-      id: 4,
-      percentage: 2.1,
-      event: 'Fed Rate Decision - September 2025',
-      eventType: 'Politics | Economics',
-      market: 'Will Fed raise rates?',
-      startTime: 'Sep 18',
-      bets: [
-        { outcome: 'Yes', venue: 'Kalshi', odds: '+180', stake: 100, payout: 280 },
-        { outcome: 'No', venue: 'Polymarket', odds: '-165', stake: 165, payout: 265 }
-      ],
-      profit: 15,
-      totalStake: 265,
-      updated: '12 min ago',
-      kalshiConditions: [
-        { name: '25 bps increase', yesPrice: 0.35, noPrice: 0.65 },
-        { name: 'No change', yesPrice: 0.45, noPrice: 0.55 },
-        { name: '25 bps decrease', yesPrice: 0.18, noPrice: 0.82 },
-        { name: '50+ bps increase', yesPrice: 0.02, noPrice: 0.98 }
-      ],
-      polymarketConditions: [
-        { name: 'Rate increase', yesPrice: 0.37, noPrice: 0.63 },
-        { name: 'No change', yesPrice: 0.44, noPrice: 0.56 },
-        { name: 'Rate decrease', yesPrice: 0.19, noPrice: 0.81 }
-      ]
-    },
-    {
-      id: 5,
-      percentage: 1.8,
-      event: 'Bitcoin above $100k by EOY',
-      eventType: 'Crypto | Finance',
-      market: 'Bitcoin > $100,000',
-      startTime: 'Dec 31',
-      bets: [
-        { outcome: 'Yes', venue: 'Polymarket', odds: '+145', stake: 100, payout: 245 },
-        { outcome: 'No', venue: 'Kalshi', odds: '-135', stake: 135, payout: 235 }
-      ],
-      profit: 10,
-      totalStake: 235,
-      updated: '15 min ago',
-      kalshiConditions: [
-        { name: 'Yes', yesPrice: 0.40, noPrice: 0.60 },
-        { name: 'No', yesPrice: 0.60, noPrice: 0.40 }
-      ],
-      polymarketConditions: [
-        { name: 'Yes', yesPrice: 0.38, noPrice: 0.62 },
-        { name: 'No', yesPrice: 0.62, noPrice: 0.38 }
-      ]
-    }
-  ];
+  // Get matches with conditions from the store
+  const { getMatchesWithConditions } = useMatchStore();
 
+  // Load and calculate arbitrage opportunities
   useEffect(() => {
-    setArbitrageData(mockArbitrageData);
-  }, []);
+    const loadArbitrageOpportunities = async () => {
+      setLoading(true);
+      setError(null);
+      
+      try {
+        const matchesWithConditions = getMatchesWithConditions();
+        
+        if (matchesWithConditions.length === 0) {
+          setArbitrageData([]);
+          setLoading(false);
+          return;
+        }
+
+        // Calculate arbitrage opportunities
+        const opportunities = await calculateMultipleArbitrageOpportunities(matchesWithConditions);
+        
+        // Format for display using the existing UI structure
+        const formattedData = opportunities.map(opp => formatArbitrageForDisplay(opp));
+        
+        setArbitrageData(formattedData);
+      } catch (err) {
+        console.error('Error loading arbitrage opportunities:', err);
+        setError(err instanceof Error ? err.message : 'Failed to load arbitrage opportunities');
+        setArbitrageData([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadArbitrageOpportunities();
+    
+    // Set up interval to refresh arbitrage data periodically
+    const interval = setInterval(loadArbitrageOpportunities, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
+  }, [getMatchesWithConditions]);
+
+  // Manual refresh function
+  const refreshArbitrageData = async () => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      const matchesWithConditions = getMatchesWithConditions();
+      const opportunities = await calculateMultipleArbitrageOpportunities(matchesWithConditions);
+      const formattedData = opportunities.map(opp => formatArbitrageForDisplay(opp));
+      setArbitrageData(formattedData);
+    } catch (err) {
+      console.error('Error refreshing arbitrage data:', err);
+      setError(err instanceof Error ? err.message : 'Failed to refresh arbitrage data');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const filteredData = arbitrageData.filter(item =>
     item.event.toLowerCase().includes(searchTerm.toLowerCase()) ||
     item.market.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const toggleRowExpansion = (id) => {
+  const toggleRowExpansion = (id: number) => {
     setExpandedRows(prev => 
       prev.includes(id) 
         ? prev.filter(rowId => rowId !== id)
@@ -146,9 +85,9 @@ const ArbitrageBets = () => {
     );
   };
 
-  const ExpandedConditions = ({ item }) => (
+  const ExpandedConditions = ({ item }: { item: any }) => (
     <tr>
-      <td colSpan="10" className="p-0">
+      <td colSpan={10} className="p-0">
         <div className="bg-gray-800 border-t border-gray-700">
           <div className="p-4">
             <div className="grid grid-cols-2 gap-6">
@@ -164,7 +103,7 @@ const ArbitrageBets = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {item.kalshiConditions.map((condition, idx) => (
+                    {item.kalshiConditions.map((condition: any, idx: number) => (
                       <tr key={idx} className="text-sm">
                         <td className="py-2">{condition.name}</td>
                         <td className="py-2 text-right text-green-400">{(condition.yesPrice * 100).toFixed(0)}¢</td>
@@ -187,7 +126,7 @@ const ArbitrageBets = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {item.polymarketConditions.map((condition, idx) => (
+                    {item.polymarketConditions.map((condition: any, idx: number) => (
                       <tr key={idx} className="text-sm">
                         <td className="py-2">{condition.name}</td>
                         <td className="py-2 text-right text-green-400">{(condition.yesPrice * 100).toFixed(0)}¢</td>
@@ -226,8 +165,12 @@ const ArbitrageBets = () => {
               />
             </div>
             
-            <button className="p-2 hover:bg-gray-800 rounded">
-              <RefreshCw className="w-5 h-5" />
+            <button 
+              onClick={refreshArbitrageData}
+              className="p-2 hover:bg-gray-800 rounded"
+              disabled={loading}
+            >
+              <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -235,120 +178,146 @@ const ArbitrageBets = () => {
 
       {/* Main Content */}
       <div className="p-4">
-        {/* Info Bar */}
-        <div className="bg-gray-900 rounded-lg p-3 mb-4 flex items-center justify-between">
-          <span className="text-sm text-gray-300">
-            Click here to learn more about how to set up notifications for arbitrage bets
-          </span>
-          <button className="text-blue-400 text-sm hover:text-blue-300">Learn more →</button>
-        </div>
+        {/* Error State */}
+        {error && (
+          <div className="bg-red-900 bg-opacity-20 border border-red-600 rounded-lg p-3 mb-4">
+            <div className="flex items-center">
+              <span className="text-red-300">Error: {error}</span>
+            </div>
+          </div>
+        )}
 
+        {/* Loading State */}
+        {loading && (
+          <div className="text-center py-8">
+            <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-2 text-blue-500" />
+            <p className="text-gray-400">Calculating arbitrage opportunities...</p>
+          </div>
+        )}
+
+        {/* No opportunities message */}
+        {!loading && !error && arbitrageData.length === 0 && (
+          <div className="text-center py-8">
+            <p className="text-gray-400">No arbitrage opportunities found.</p>
+            <p className="text-sm text-gray-500 mt-2">
+              Make sure you have matched markets with condition mappings in the Market Matcher.
+            </p>
+          </div>
+        )}
         {/* Tabs - Only Pre-match now */}
-        <div className="flex space-x-1 mb-4">
-          <button
-            className="px-4 py-2 rounded-t-lg text-sm font-medium bg-gray-800 text-white"
-          >
-            Pre-match <span className="ml-1 text-xs bg-gray-700 px-2 py-1 rounded">{filteredData.length}</span>
-          </button>
-        </div>
+        {!loading && !error && arbitrageData.length > 0 && (
+          <>
+            <div className="flex space-x-1 mb-4">
+              <button
+                className="px-4 py-2 rounded-t-lg text-sm font-medium bg-gray-800 text-white"
+              >
+                Pre-match <span className="ml-1 text-xs bg-gray-700 px-2 py-1 rounded">{filteredData.length}</span>
+              </button>
+            </div>
 
-        {/* Table */}
-        <div className="bg-gray-900 rounded-lg overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="bg-gray-800 text-left text-xs uppercase text-gray-400">
-                <th className="p-3">Percent ↓</th>
-                <th className="p-3">Event Name</th>
-                <th className="p-3">Start Time</th>
-                <th className="p-3">Market</th>
-                <th className="p-3">Bets</th>
-                <th className="p-3">Odds</th>
-                <th className="p-3">Stake</th>
-                <th className="p-3">Profit</th>
-                <th className="p-3">Updated</th>
-                <th className="p-3"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredData.map((item) => (
-                <React.Fragment key={item.id}>
-                  <tr 
-                    className="border-t border-gray-800 hover:bg-gray-800 cursor-pointer"
-                    onClick={() => toggleRowExpansion(item.id)}
-                  >
-                    <td className="p-3">
-                      <div className="flex items-center space-x-2">
-                        <Square className="w-4 h-4 text-gray-600" />
-                        <Circle className="w-4 h-4 text-blue-500" />
-                        <span className="text-green-400 font-medium">{item.percentage}%</span>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-sm">{item.event}</div>
-                      <div className="text-xs text-gray-500">{item.eventType}</div>
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="text-sm">{item.startTime}</span>
-                    </td>
-                    <td className="p-3">
-                      <span className="text-sm">{item.market}</span>
-                    </td>
-                    <td className="p-3">
-                      <div className="space-y-1">
-                        {item.bets.map((bet, i) => (
-                          <div key={i} className="text-sm">
-                            {i === 0 ? (
-                              <span className="text-green-400">{bet.outcome}</span>
-                            ) : (
-                              <span className="text-red-400">{bet.outcome}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="space-y-1">
-                        {item.bets.map((bet, i) => (
-                          <div key={i} className="flex items-center space-x-2 text-sm">
-                            <span className="bg-gray-800 px-2 py-1 rounded text-xs">
-                              {bet.venue}
-                            </span>
-                            <span className="font-medium">{bet.odds}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-sm font-medium">${item.totalStake}</div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-green-400 font-medium">+${item.profit}</div>
-                    </td>
-                    <td className="p-3">
-                      <span className="text-xs text-gray-400">{item.updated}</span>
-                    </td>
-                    <td className="p-3">
-                      <ChevronDown 
-                        className={`w-4 h-4 text-gray-400 transform transition-transform ${
-                          expandedRows.includes(item.id) ? 'rotate-180' : ''
-                        }`} 
-                      />
-                    </td>
+            {/* Table */}
+            <div className="bg-gray-900 rounded-lg overflow-hidden">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-800 text-left text-xs uppercase text-gray-400">
+                    <th className="p-3">Percent ↓</th>
+                    <th className="p-3">Event Name</th>
+                    <th className="p-3">Start Time</th>
+                    <th className="p-3">Market</th>
+                    <th className="p-3">Bets</th>
+                    <th className="p-3">Odds</th>
+                    <th className="p-3">Stake</th>
+                    <th className="p-3">Profit</th>
+                    <th className="p-3">Updated</th>
+                    <th className="p-3"></th>
                   </tr>
-                  {expandedRows.includes(item.id) && <ExpandedConditions item={item} />}
-                </React.Fragment>
-              ))}
-            </tbody>
-          </table>
-        </div>
+                </thead>
+                <tbody>
+                  {filteredData.map((item) => (
+                    <React.Fragment key={item.id}>
+                      <tr 
+                        className="border-t border-gray-800 hover:bg-gray-800 cursor-pointer"
+                        onClick={() => toggleRowExpansion(item.id)}
+                      >
+                        <td className="p-3">
+                          <div className="flex items-center space-x-2">
+                            <Square className="w-4 h-4 text-gray-600" />
+                            <Circle className="w-4 h-4 text-blue-500" />
+                            <span className="text-green-400 font-medium">{item.percentage.toFixed(2)}%</span>
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="text-sm">{item.event}</div>
+                          <div className="text-xs text-gray-500">{item.eventType}</div>
+                        </td>
+                        <td className="p-3 text-center">
+                          <span className="text-sm">{item.startTime}</span>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-sm">{item.market}</span>
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-1">
+                            {item.bets.map((bet: any, i: number) => (
+                              <div key={i} className="text-sm">
+                                {i === 0 ? (
+                                  <span className="text-green-400">{bet.outcome}</span>
+                                ) : (
+                                  <span className="text-red-400">{bet.outcome}</span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="space-y-1">
+                            {item.bets.map((bet: any, i: number) => (
+                              <div key={i} className="flex items-center space-x-2 text-sm">
+                                <span className="bg-gray-800 px-2 py-1 rounded text-xs">
+                                  {bet.venue}
+                                </span>
+                                <span className="font-medium">{bet.odds}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </td>
+                        <td className="p-3">
+                          <div className="text-sm font-medium">${item.totalStake}</div>
+                        </td>
+                        <td className="p-3">
+                          <div className="text-green-400 font-medium">+${item.profit.toFixed(2)}</div>
+                        </td>
+                        <td className="p-3">
+                          <span className="text-xs text-gray-400">{item.updated}</span>
+                        </td>
+                        <td className="p-3">
+                          <ChevronDown 
+                            className={`w-4 h-4 text-gray-400 transform transition-transform ${
+                              expandedRows.includes(item.id) ? 'rotate-180' : ''
+                            }`} 
+                          />
+                        </td>
+                      </tr>
+                      {expandedRows.includes(item.id) && <ExpandedConditions item={item} />}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
 
         {/* Settings and Refresh buttons */}
         <div className="fixed bottom-6 right-6 flex space-x-2">
           <button className="bg-gray-800 hover:bg-gray-700 p-3 rounded-full shadow-lg">
             <Settings className="w-5 h-5" />
           </button>
-          <button className="bg-blue-600 hover:bg-blue-700 p-3 rounded-full shadow-lg">
-            <RefreshCw className="w-5 h-5" />
+          <button 
+            onClick={refreshArbitrageData}
+            className="bg-blue-600 hover:bg-blue-700 p-3 rounded-full shadow-lg"
+            disabled={loading}
+          >
+            <RefreshCw className={`w-5 h-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
       </div>
