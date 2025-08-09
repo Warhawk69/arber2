@@ -1,144 +1,59 @@
-import React, { useState, useEffect } from 'react';
-import { Circle, Square, Search, Settings, RefreshCw, ChevronDown } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Circle, Square, Search, Settings, RefreshCw, ChevronDown, AlertCircle } from 'lucide-react';
+import { useLiveOrderbooks } from './hooks/useLiveOrderbooks';
+import { useMatchesStore } from './state/matches-store';
+import { arbitrageCalculator } from './lib/arbitrage';
+import { ArbitrageOpportunity } from './api/types';
 
 const ArbitrageBets = () => {
   const [activeTab, setActiveTab] = useState('pre-match');
   const [searchTerm, setSearchTerm] = useState('');
-  const [arbitrageData, setArbitrageData] = useState([]);
-  const [expandedRows, setExpandedRows] = useState([]);
+  const [expandedRows, setExpandedRows] = useState<string[]>([]);
+  const [minAPR, setMinAPR] = useState(1); // Minimum APR filter (1%)
+  const [maxDays, setMaxDays] = useState(365); // Maximum days until close filter
 
-  // Mock data for demonstration with conditions
-  const mockArbitrageData = [
-    {
-      id: 1,
-      percentage: 1.64,
-      event: 'Toronto Blue Jays vs Cleveland Guardians',
-      eventType: 'Baseball | MLB',
-      market: '1st inning Total Runs',
-      startTime: '7:10 PM',
-      bets: [
-        { outcome: 'Over 0.5', venue: 'NoVig', odds: '+125', stake: 100, payout: 225 },
-        { outcome: 'Under 0.5', venue: 'Sporttrade', odds: '-117', stake: 117, payout: 217 }
-      ],
-      profit: 8,
-      totalStake: 217,
-      updated: '2 min ago',
-      kalshiConditions: [
-        { name: 'Over 0.5', yesPrice: 0.44, noPrice: 0.56 },
-        { name: 'Under 0.5', yesPrice: 0.54, noPrice: 0.46 }
-      ],
-      polymarketConditions: [
-        { name: 'Over 0.5 runs', yesPrice: 0.42, noPrice: 0.58 },
-        { name: 'Under 0.5 runs', yesPrice: 0.56, noPrice: 0.44 }
-      ]
-    },
-    {
-      id: 2,
-      percentage: 1.6,
-      event: 'Atlanta Braves vs Pittsburgh Pirates',
-      eventType: 'Baseball | MLB',
-      market: 'Total Runs',
-      startTime: '8:39 PM',
-      bets: [
-        { outcome: 'Over 8.5', venue: 'ProphetX', odds: '-108', stake: 108, payout: 208 },
-        { outcome: 'Under 8.5', venue: 'NoVig', odds: '+113', stake: 100, payout: 213 }
-      ],
-      profit: 5,
-      totalStake: 208,
-      updated: '5 min ago',
-      kalshiConditions: [
-        { name: 'Over 8.5', yesPrice: 0.52, noPrice: 0.48 },
-        { name: 'Under 8.5', yesPrice: 0.47, noPrice: 0.53 }
-      ],
-      polymarketConditions: [
-        { name: 'Over 8.5 total', yesPrice: 0.50, noPrice: 0.50 },
-        { name: 'Under 8.5 total', yesPrice: 0.49, noPrice: 0.51 }
-      ]
-    },
-    {
-      id: 3,
-      percentage: 1.35,
-      event: 'Atlanta Braves vs Pittsburgh Pirates',
-      eventType: 'Baseball | MLB',
-      market: '1st Half Total Runs',
-      startTime: '8:30 PM',
-      bets: [
-        { outcome: 'Over 7.5', venue: 'Kalshi', odds: '-235', stake: 235, payout: 335 },
-        { outcome: 'Under 7.5', venue: 'Polymarket', odds: '+240', stake: 100, payout: 340 }
-      ],
-      profit: 5,
-      totalStake: 335,
-      updated: '8 min ago',
-      kalshiConditions: [
-        { name: 'Over 7.5', yesPrice: 0.70, noPrice: 0.30 },
-        { name: 'Under 7.5', yesPrice: 0.29, noPrice: 0.71 }
-      ],
-      polymarketConditions: [
-        { name: 'Over 7.5 runs', yesPrice: 0.68, noPrice: 0.32 },
-        { name: 'Under 7.5 runs', yesPrice: 0.31, noPrice: 0.69 }
-      ]
-    },
-    {
-      id: 4,
-      percentage: 2.1,
-      event: 'Fed Rate Decision - September 2025',
-      eventType: 'Politics | Economics',
-      market: 'Will Fed raise rates?',
-      startTime: 'Sep 18',
-      bets: [
-        { outcome: 'Yes', venue: 'Kalshi', odds: '+180', stake: 100, payout: 280 },
-        { outcome: 'No', venue: 'Polymarket', odds: '-165', stake: 165, payout: 265 }
-      ],
-      profit: 15,
-      totalStake: 265,
-      updated: '12 min ago',
-      kalshiConditions: [
-        { name: '25 bps increase', yesPrice: 0.35, noPrice: 0.65 },
-        { name: 'No change', yesPrice: 0.45, noPrice: 0.55 },
-        { name: '25 bps decrease', yesPrice: 0.18, noPrice: 0.82 },
-        { name: '50+ bps increase', yesPrice: 0.02, noPrice: 0.98 }
-      ],
-      polymarketConditions: [
-        { name: 'Rate increase', yesPrice: 0.37, noPrice: 0.63 },
-        { name: 'No change', yesPrice: 0.44, noPrice: 0.56 },
-        { name: 'Rate decrease', yesPrice: 0.19, noPrice: 0.81 }
-      ]
-    },
-    {
-      id: 5,
-      percentage: 1.8,
-      event: 'Bitcoin above $100k by EOY',
-      eventType: 'Crypto | Finance',
-      market: 'Bitcoin > $100,000',
-      startTime: 'Dec 31',
-      bets: [
-        { outcome: 'Yes', venue: 'Polymarket', odds: '+145', stake: 100, payout: 245 },
-        { outcome: 'No', venue: 'Kalshi', odds: '-135', stake: 135, payout: 235 }
-      ],
-      profit: 10,
-      totalStake: 235,
-      updated: '15 min ago',
-      kalshiConditions: [
-        { name: 'Yes', yesPrice: 0.40, noPrice: 0.60 },
-        { name: 'No', yesPrice: 0.60, noPrice: 0.40 }
-      ],
-      polymarketConditions: [
-        { name: 'Yes', yesPrice: 0.38, noPrice: 0.62 },
-        { name: 'No', yesPrice: 0.62, noPrice: 0.38 }
-      ]
+  // Use live data hooks
+  const { 
+    kalshiMarkets, 
+    polymarketMarkets, 
+    arbitrageOpportunities,
+    isLoading, 
+    errors, 
+    lastUpdated, 
+    refresh 
+  } = useLiveOrderbooks();
+  
+  const matchesStore = useMatchesStore();
+
+  // Filter and process arbitrage opportunities
+  const filteredOpportunities = useMemo(() => {
+    let opportunities = arbitrageOpportunities;
+
+    // Filter by search term
+    if (searchTerm) {
+      opportunities = opportunities.filter(opp =>
+        opp.kalshiMarket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        opp.polymarketMarket.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        opp.kalshiCondition.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        opp.polymarketCondition.name.toLowerCase().includes(searchTerm.toLowerCase())
+      );
     }
-  ];
 
-  useEffect(() => {
-    setArbitrageData(mockArbitrageData);
-  }, []);
+    // Filter by minimum APR
+    opportunities = arbitrageCalculator.filterByMinAPR(opportunities, minAPR / 100);
 
-  const filteredData = arbitrageData.filter(item =>
-    item.event.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.market.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+    // Filter by maximum days
+    opportunities = arbitrageCalculator.filterByMaxDays(opportunities, maxDays);
 
-  const toggleRowExpansion = (id) => {
+    return opportunities;
+  }, [arbitrageOpportunities, searchTerm, minAPR, maxDays]);
+
+  // Calculate portfolio statistics
+  const portfolioStats = useMemo(() => {
+    return arbitrageCalculator.calculatePortfolioStats(filteredOpportunities);
+  }, [filteredOpportunities]);
+
+  const toggleRowExpansion = (id: string) => {
     setExpandedRows(prev => 
       prev.includes(id) 
         ? prev.filter(rowId => rowId !== id)
@@ -146,56 +61,124 @@ const ArbitrageBets = () => {
     );
   };
 
-  const ExpandedConditions = ({ item }) => (
+  const formatAPR = (apr: number): string => {
+    return `${(apr * 100).toFixed(2)}%`;
+  };
+
+  const formatCurrency = (amount: number): string => {
+    return `$${amount.toFixed(2)}`;
+  };
+
+  const getVenueColor = (venue: string): string => {
+    switch (venue.toLowerCase()) {
+      case 'kalshi': return 'text-blue-400';
+      case 'polymarket': return 'text-purple-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  const ExpandedOpportunity = ({ opportunity }: { opportunity: ArbitrageOpportunity }) => (
     <tr>
       <td colSpan="10" className="p-0">
         <div className="bg-gray-800 border-t border-gray-700">
           <div className="p-4">
             <div className="grid grid-cols-2 gap-6">
-              {/* Kalshi Conditions */}
+              {/* Kalshi Market Details */}
               <div>
-                <h4 className="text-sm font-semibold text-blue-400 mb-3">Kalshi Conditions</h4>
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-xs text-gray-400 border-b border-gray-700">
-                      <th className="text-left pb-2">Condition</th>
-                      <th className="text-right pb-2">Yes Price</th>
-                      <th className="text-right pb-2">No Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {item.kalshiConditions.map((condition, idx) => (
-                      <tr key={idx} className="text-sm">
-                        <td className="py-2">{condition.name}</td>
-                        <td className="py-2 text-right text-green-400">{(condition.yesPrice * 100).toFixed(0)}¢</td>
-                        <td className="py-2 text-right text-red-400">{(condition.noPrice * 100).toFixed(0)}¢</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <h4 className="text-sm font-semibold text-blue-400 mb-3">Kalshi Market</h4>
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-xs text-gray-400">Market</div>
+                    <div className="text-sm font-medium">{opportunity.kalshiMarket.title}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Condition</div>
+                    <div className="text-sm">{opportunity.kalshiCondition.name}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-gray-400">Yes Price</div>
+                      <div className="text-sm text-green-400">
+                        {(opportunity.kalshiCondition.yesPrice * 100).toFixed(0)}¢
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">No Price</div>
+                      <div className="text-sm text-red-400">
+                        {(opportunity.kalshiCondition.noPrice * 100).toFixed(0)}¢
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Close Time</div>
+                    <div className="text-sm">{opportunity.kalshiMarket.closeTime.toLocaleString()}</div>
+                  </div>
+                </div>
               </div>
 
-              {/* Polymarket Conditions */}
+              {/* Polymarket Market Details */}
               <div>
-                <h4 className="text-sm font-semibold text-purple-400 mb-3">Polymarket Conditions</h4>
-                <table className="w-full">
-                  <thead>
-                    <tr className="text-xs text-gray-400 border-b border-gray-700">
-                      <th className="text-left pb-2">Condition</th>
-                      <th className="text-right pb-2">Yes Price</th>
-                      <th className="text-right pb-2">No Price</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {item.polymarketConditions.map((condition, idx) => (
-                      <tr key={idx} className="text-sm">
-                        <td className="py-2">{condition.name}</td>
-                        <td className="py-2 text-right text-green-400">{(condition.yesPrice * 100).toFixed(0)}¢</td>
-                        <td className="py-2 text-right text-red-400">{(condition.noPrice * 100).toFixed(0)}¢</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <h4 className="text-sm font-semibold text-purple-400 mb-3">Polymarket Market</h4>
+                <div className="space-y-2">
+                  <div>
+                    <div className="text-xs text-gray-400">Market</div>
+                    <div className="text-sm font-medium">{opportunity.polymarketMarket.title}</div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Condition</div>
+                    <div className="text-sm">{opportunity.polymarketCondition.name}</div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <div className="text-xs text-gray-400">Yes Price</div>
+                      <div className="text-sm text-green-400">
+                        {(opportunity.polymarketCondition.yesPrice * 100).toFixed(0)}¢
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-400">No Price</div>
+                      <div className="text-sm text-red-400">
+                        {(opportunity.polymarketCondition.noPrice * 100).toFixed(0)}¢
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-gray-400">Close Time</div>
+                    <div className="text-sm">{opportunity.polymarketMarket.closeTime.toLocaleString()}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Arbitrage Details */}
+            <div className="mt-6 bg-gray-700 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-yellow-400 mb-3">Arbitrage Analysis</h4>
+              <div className="grid grid-cols-4 gap-4">
+                <div>
+                  <div className="text-xs text-gray-400">Total Cost (C)</div>
+                  <div className="text-sm font-medium">{formatCurrency(opportunity.totalCost)}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400">Period Return</div>
+                  <div className="text-sm font-medium text-green-400">
+                    {(opportunity.periodReturn * 100).toFixed(2)}%
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400">Days Until Close</div>
+                  <div className="text-sm font-medium">{opportunity.daysUntilClose}</div>
+                </div>
+                <div>
+                  <div className="text-xs text-gray-400">Best Strategy</div>
+                  <div className="text-xs">
+                    <div className={`${getVenueColor(opportunity.minYesVenue)}`}>
+                      Buy YES on {opportunity.minYesVenue}
+                    </div>
+                    <div className={`${getVenueColor(opportunity.minNoVenue)}`}>
+                      Buy NO on {opportunity.minNoVenue}
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -212,6 +195,13 @@ const ArbitrageBets = () => {
           <div>
             <h2 className="text-xl font-semibold">Arbitrage Bets 🎯</h2>
             <p className="text-sm text-gray-400 mt-1">Real-time arbitrage opportunities across prediction markets</p>
+            {portfolioStats.totalOpportunities > 0 && (
+              <div className="text-xs text-gray-500 mt-1">
+                {portfolioStats.totalOpportunities} opportunities • 
+                Avg APR: {formatAPR(portfolioStats.averageAPR)} • 
+                Total Profit: {formatCurrency(portfolioStats.totalPotentialProfit)}
+              </div>
+            )}
           </div>
           
           <div className="flex items-center space-x-4">
@@ -219,15 +209,46 @@ const ArbitrageBets = () => {
               <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
               <input
                 type="text"
-                placeholder="Search events..."
+                placeholder="Search opportunities..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-sm focus:outline-none focus:border-blue-500"
               />
             </div>
             
-            <button className="p-2 hover:bg-gray-800 rounded">
-              <RefreshCw className="w-5 h-5" />
+            {/* Filter Controls */}
+            <div className="flex items-center space-x-2">
+              <div className="text-xs text-gray-400">Min APR:</div>
+              <input
+                type="number"
+                min="0"
+                max="100"
+                step="0.1"
+                value={minAPR}
+                onChange={(e) => setMinAPR(parseFloat(e.target.value) || 0)}
+                className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs"
+              />
+              <div className="text-xs text-gray-400">%</div>
+            </div>
+            
+            <div className="flex items-center space-x-2">
+              <div className="text-xs text-gray-400">Max days:</div>
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={maxDays}
+                onChange={(e) => setMaxDays(parseInt(e.target.value) || 365)}
+                className="w-16 px-2 py-1 bg-gray-800 border border-gray-700 rounded text-xs"
+              />
+            </div>
+            
+            <button 
+              onClick={refresh}
+              disabled={isLoading}
+              className="p-2 hover:bg-gray-800 rounded disabled:opacity-50"
+            >
+              <RefreshCw className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
             </button>
           </div>
         </div>
@@ -235,20 +256,83 @@ const ArbitrageBets = () => {
 
       {/* Main Content */}
       <div className="p-4">
-        {/* Info Bar */}
-        <div className="bg-gray-900 rounded-lg p-3 mb-4 flex items-center justify-between">
-          <span className="text-sm text-gray-300">
-            Click here to learn more about how to set up notifications for arbitrage bets
-          </span>
-          <button className="text-blue-400 text-sm hover:text-blue-300">Learn more →</button>
-        </div>
+        {/* Error Display */}
+        {errors.length > 0 && (
+          <div className="bg-red-900 bg-opacity-20 border border-red-600 rounded-lg p-3 mb-4">
+            <div className="flex items-start">
+              <AlertCircle className="w-4 h-4 text-red-500 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="text-sm">
+                <div className="font-medium text-red-500">API Errors:</div>
+                {errors.slice(0, 2).map((error, idx) => (
+                  <div key={idx} className="text-red-400 mt-1">{error.message}</div>
+                ))}
+                {errors.length > 2 && (
+                  <div className="text-red-400 mt-1">...and {errors.length - 2} more errors</div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
-        {/* Tabs - Only Pre-match now */}
+        {/* No Matches Warning */}
+        {matchesStore.matches.length === 0 && !isLoading && (
+          <div className="bg-yellow-900 bg-opacity-20 border border-yellow-600 rounded-lg p-3 mb-4">
+            <div className="flex items-start">
+              <AlertCircle className="w-4 h-4 text-yellow-500 mt-0.5 mr-2 flex-shrink-0" />
+              <div className="text-sm">
+                <div className="font-medium text-yellow-500">No Market Matches Found</div>
+                <div className="text-yellow-400 mt-1">
+                  Use the Market Matcher to create market matches before arbitrage opportunities can be detected.
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Last Updated Info */}
+        {lastUpdated && (
+          <div className="bg-gray-800 rounded-lg p-2 mb-4 text-xs text-gray-400 text-center">
+            Last updated: {lastUpdated.toLocaleTimeString()} • 
+            {arbitrageOpportunities.length} total opportunities • 
+            {filteredOpportunities.length} after filters
+          </div>
+        )}
+
+        {/* Loading State */}
+        {isLoading && filteredOpportunities.length === 0 && (
+          <div className="bg-gray-900 rounded-lg p-8 mb-4 text-center">
+            <RefreshCw className="w-8 h-8 text-blue-500 animate-spin mx-auto mb-4" />
+            <p className="text-gray-400">Scanning for arbitrage opportunities...</p>
+            <p className="text-xs text-gray-500 mt-2">
+              Analyzing {kalshiMarkets.length} Kalshi markets and {polymarketMarkets.length} Polymarket markets
+            </p>
+          </div>
+        )}
+        {/* Info Bar */}
+        {filteredOpportunities.length > 0 && (
+          <div className="bg-blue-900 bg-opacity-20 border border-blue-600 rounded-lg p-3 mb-4 flex items-center justify-between">
+            <span className="text-sm text-blue-300">
+              💡 Found {filteredOpportunities.length} arbitrage opportunities! 
+              Best APR: {formatAPR(arbitrageCalculator.getBestOpportunity(filteredOpportunities)?.annualizedReturn || 0)}
+            </span>
+            <button 
+              onClick={() => {
+                setMinAPR(5);
+                setMaxDays(30);
+              }}
+              className="text-blue-400 text-sm hover:text-blue-300"
+            >
+              Show best opportunities →
+            </button>
+          </div>
+        )}
+
+        {/* Tabs */}
         <div className="flex space-x-1 mb-4">
           <button
             className="px-4 py-2 rounded-t-lg text-sm font-medium bg-gray-800 text-white"
           >
-            Pre-match <span className="ml-1 text-xs bg-gray-700 px-2 py-1 rounded">{filteredData.length}</span>
+            Live Opportunities <span className="ml-1 text-xs bg-gray-700 px-2 py-1 rounded">{filteredOpportunities.length}</span>
           </button>
         </div>
 
@@ -257,87 +341,121 @@ const ArbitrageBets = () => {
           <table className="w-full">
             <thead>
               <tr className="bg-gray-800 text-left text-xs uppercase text-gray-400">
-                <th className="p-3">Percent ↓</th>
+                <th className="p-3">APR ↓</th>
                 <th className="p-3">Event Name</th>
-                <th className="p-3">Start Time</th>
-                <th className="p-3">Market</th>
-                <th className="p-3">Bets</th>
-                <th className="p-3">Odds</th>
-                <th className="p-3">Stake</th>
-                <th className="p-3">Profit</th>
+                <th className="p-3">Close Time</th>
+                <th className="p-3">Days Left</th>
+                <th className="p-3">Best Strategy</th>
+                <th className="p-3">Min Prices</th>
+                <th className="p-3">Total Cost</th>
+                <th className="p-3">Profit ($100)</th>
                 <th className="p-3">Updated</th>
                 <th className="p-3"></th>
               </tr>
             </thead>
             <tbody>
-              {filteredData.map((item) => (
-                <React.Fragment key={item.id}>
-                  <tr 
-                    className="border-t border-gray-800 hover:bg-gray-800 cursor-pointer"
-                    onClick={() => toggleRowExpansion(item.id)}
-                  >
-                    <td className="p-3">
-                      <div className="flex items-center space-x-2">
-                        <Square className="w-4 h-4 text-gray-600" />
-                        <Circle className="w-4 h-4 text-blue-500" />
-                        <span className="text-green-400 font-medium">{item.percentage}%</span>
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-sm">{item.event}</div>
-                      <div className="text-xs text-gray-500">{item.eventType}</div>
-                    </td>
-                    <td className="p-3 text-center">
-                      <span className="text-sm">{item.startTime}</span>
-                    </td>
-                    <td className="p-3">
-                      <span className="text-sm">{item.market}</span>
-                    </td>
-                    <td className="p-3">
-                      <div className="space-y-1">
-                        {item.bets.map((bet, i) => (
-                          <div key={i} className="text-sm">
-                            {i === 0 ? (
-                              <span className="text-green-400">{bet.outcome}</span>
-                            ) : (
-                              <span className="text-red-400">{bet.outcome}</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="space-y-1">
-                        {item.bets.map((bet, i) => (
-                          <div key={i} className="flex items-center space-x-2 text-sm">
-                            <span className="bg-gray-800 px-2 py-1 rounded text-xs">
-                              {bet.venue}
+              {filteredOpportunities.length === 0 ? (
+                <tr>
+                  <td colSpan="10" className="p-8 text-center text-gray-500">
+                    {isLoading ? 'Loading arbitrage opportunities...' : 
+                     matchesStore.matches.length === 0 ? 'Create market matches first to see arbitrage opportunities' :
+                     'No arbitrage opportunities found with current filters'}
+                  </td>
+                </tr>
+              ) : (
+                filteredOpportunities.map((opportunity) => (
+                  <React.Fragment key={opportunity.id}>
+                    <tr 
+                      className="border-t border-gray-800 hover:bg-gray-800 cursor-pointer"
+                      onClick={() => toggleRowExpansion(opportunity.id)}
+                    >
+                      <td className="p-3">
+                        <div className="flex items-center space-x-2">
+                          <Square className="w-4 h-4 text-gray-600" />
+                          <Circle className="w-4 h-4 text-blue-500" />
+                          <span className="text-green-400 font-medium">
+                            {formatAPR(opportunity.annualizedReturn)}
+                          </span>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-sm font-medium">
+                          {opportunity.kalshiMarket.title}
+                        </div>
+                        <div className="text-xs text-gray-500">
+                          {opportunity.kalshiMarket.category} | {opportunity.kalshiCondition.name}
+                        </div>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className="text-sm">
+                          {opportunity.earliestCloseTime.toLocaleDateString()}
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <span className="text-sm">{opportunity.daysUntilClose}</span>
+                      </td>
+                      <td className="p-3">
+                        <div className="space-y-1">
+                          <div className="text-sm">
+                            <span className="text-green-400">
+                              YES: {opportunity.minYesVenue}
                             </span>
-                            <span className="font-medium">{bet.odds}</span>
                           </div>
-                        ))}
-                      </div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-sm font-medium">${item.totalStake}</div>
-                    </td>
-                    <td className="p-3">
-                      <div className="text-green-400 font-medium">+${item.profit}</div>
-                    </td>
-                    <td className="p-3">
-                      <span className="text-xs text-gray-400">{item.updated}</span>
-                    </td>
-                    <td className="p-3">
-                      <ChevronDown 
-                        className={`w-4 h-4 text-gray-400 transform transition-transform ${
-                          expandedRows.includes(item.id) ? 'rotate-180' : ''
-                        }`} 
-                      />
-                    </td>
-                  </tr>
-                  {expandedRows.includes(item.id) && <ExpandedConditions item={item} />}
-                </React.Fragment>
-              ))}
+                          <div className="text-sm">
+                            <span className="text-red-400">
+                              NO: {opportunity.minNoVenue}
+                            </span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center space-x-2 text-sm">
+                            <span className={`${getVenueColor(opportunity.minYesVenue)} font-medium`}>
+                              {(opportunity.minYes * 100).toFixed(0)}¢
+                            </span>
+                            <span className="text-green-400 text-xs">YES</span>
+                          </div>
+                          <div className="flex items-center space-x-2 text-sm">
+                            <span className={`${getVenueColor(opportunity.minNoVenue)} font-medium`}>
+                              {(opportunity.minNo * 100).toFixed(0)}¢
+                            </span>
+                            <span className="text-red-400 text-xs">NO</span>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-sm font-medium">
+                          {formatCurrency(opportunity.totalCost)}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <div className="text-green-400 font-medium">
+                          +{formatCurrency(opportunity.profitOn100)}
+                        </div>
+                      </td>
+                      <td className="p-3">
+                        <span className="text-xs text-gray-400">
+                          {(() => {
+                            const now = new Date();
+                            const diffMs = now.getTime() - opportunity.updatedAt.getTime();
+                            const diffMins = Math.floor(diffMs / 60000);
+                            return diffMins < 1 ? 'Just now' : `${diffMins}m ago`;
+                          })()}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <ChevronDown 
+                          className={`w-4 h-4 text-gray-400 transform transition-transform ${
+                            expandedRows.includes(opportunity.id) ? 'rotate-180' : ''
+                          }`} 
+                        />
+                      </td>
+                    </tr>
+                    {expandedRows.includes(opportunity.id) && <ExpandedOpportunity opportunity={opportunity} />}
+                  </React.Fragment>
+                ))
+              )}
             </tbody>
           </table>
         </div>
